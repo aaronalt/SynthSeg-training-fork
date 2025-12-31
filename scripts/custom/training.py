@@ -22,12 +22,17 @@ License.
 
 
 # project imports
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from SynthSeg.training import training
+import numpy as np
+
 
 
 # path training label maps
-path_training_label_maps = '../../data/training_label_maps'
-path_model_dir = './outputs_tutorial_3/'
+path_training_label_maps = './data/training_label_maps'
+path_model_dir = './outputs/training'
 batchsize = 1
 
 # architecture parameters
@@ -44,25 +49,25 @@ feat_multiplier = 2    # if feat_multiplier is set to 1, we will keep the number
 lr = 1e-4               # learning rate
 wl2_epochs = 1          # number of pre-training epochs with wl2 metric w.r.t. the layer before the softmax
 dice_epochs = 100       # number of training epochs
-steps_per_epoch = 5000  # number of iteration per epoch
+steps_per_epoch = 500  # number of iteration per epoch
 
 
 # ---------- Generation parameters ----------
 # these parameters are from the previous tutorial, and thus we do not explain them again here
 
 # generation and segmentation labels
-path_generation_labels = '../../data/labels_classes_priors/generation_labels.npy'
-n_neutral_labels = 18
-path_segmentation_labels = '../../data/labels_classes_priors/synthseg_segmentation_labels.npy'
+path_generation_labels = np.array([0, 24, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 26, 138])
+n_neutral_labels = len(path_generation_labels)
+path_segmentation_labels = np.array([0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 26, 138])
 
 # shape and resolution of the outputs
 target_res = None
-output_shape = 160
+output_shape = (160, 160, 160)
 n_channels = 1
 
 # GMM sampling
 prior_distributions = 'uniform'
-path_generation_classes = '../../data/labels_classes_priors/generation_classes.npy'
+path_generation_classes = np.array([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22])
 
 # spatial deformation parameters
 flipping = True

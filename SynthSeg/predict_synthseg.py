@@ -68,7 +68,8 @@ def predict(path_images,
             list_correct_labels=None,
             compute_distances=False,
             recompute=True,
-            verbose=True):
+            verbose=True,
+            keepgeom=False):
 
     # prepare input/output filepaths
     outputs = prepare_output_files(path_images, path_segmentations, path_posteriors, path_resampled,
@@ -200,6 +201,12 @@ def predict(path_images,
                 utils.save_volume(seg, aff, h, path_segmentations[i], dtype='int32')
                 if path_posteriors[i] is not None:
                     utils.save_volume(posteriors, aff, h, path_posteriors[i], dtype='float32')
+                import surfa as sf
+                sfimage = None
+                if keepgeom:
+                    sfimage = sf.load_volume(path_images[i])
+                    utils.save_volume(seg, aff, h, path_segmentations[i], dtype='int32',
+                            resample_like_image=sfimage)
 
                 # write volumes to disc if necessary
                 if path_volumes[i] is not None:

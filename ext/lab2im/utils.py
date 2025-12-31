@@ -119,7 +119,7 @@ def load_volume(path_volume, im_only=True, squeeze=True, dtype=None, aff_ref=Non
         return volume, aff, header
 
 
-def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
+def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3, resample_like_image=None, labels=None):
     """
     Save a volume.
     :param volume: volume to save
@@ -131,7 +131,10 @@ def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
     :param dtype: (optional) numpy dtype for the saved volume.
     :param n_dims: (optional) number of dimensions, to avoid confusion in multi-channel case. Default is None, where
     n_dims is automatically inferred.
+    :param resample_like_image: (optional) surfa Volume object to match geometry to
+    :param labels: (optional) color table labels to embed
     """
+    import surfa as sf
 
     mkdir(os.path.dirname(path))
     if '.npz' in path:
@@ -158,6 +161,19 @@ def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
             res = reformat_to_list(res, length=n_dims, dtype=None)
             nifty.header.set_zooms(res)
         nib.save(nifty, path)
+
+        if (resample_like_image is not None) or (labels is not None):
+            # Re-read the nibabel volume with surfa
+            src = sf.load_volume(path)
+            if resample_like_image is not None:
+                res = resample_like_image._geometry.voxsize
+                print(f'Reslicing to have same geom as the input {res}')
+                newsrc = src.resample_like(resample_like_image, method='nearest')
+            else:
+                newsrc = src
+            if labels is not None:
+                newsrc.labels = labels
+            newsrc.save(path)
 
 
 def get_volume_info(path_volume, return_volume=False, aff_ref=None, max_channels=10):

@@ -46,6 +46,8 @@ parser.add_argument("--crop", nargs='+', type=int, help="(optional) Size of 3D p
 parser.add_argument("--threads", type=int, default=1, help="(optional) Number of cores to be used. Default is 1.")
 parser.add_argument("--cpu", action="store_true", help="(optional) Enforce running with CPU rather than GPU.")
 parser.add_argument("--v1", action="store_true", help="(optional) Use SynthSeg 1.0 (updated 25/06/22).")
+parser.add_argument("--keepgeom", action="store_true",
+                   help="(optional) Force output to match input geometry/resolution")
 
 # check for no arguments
 if len(sys.argv) < 2:
@@ -133,4 +135,5 @@ predict(path_images=args['i'],
         names_qc=args['names_qc_labels'],
         cropping=args['crop'],
         topology_classes=args['topology_classes'],
-        ct=args['ct'])
+        ct=args['ct'],
+        keepgeom=args.get('keepgeom', False))

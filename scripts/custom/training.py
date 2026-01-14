@@ -1,88 +1,90 @@
 """
-
-This script shows how we trained SynthSeg.
-Importantly, it reuses numerous parameters seen in the previous tutorial about image generation
-(i.e., 2-generation_explained.py), which we strongly recommend reading before this one.
-
-
-
-If you use this code, please cite one of the SynthSeg papers:
-https://github.com/BBillot/SynthSeg/blob/master/bibtex.bib
-
-Copyright 2020 Benjamin Billot
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
-compliance with the License. You may obtain a copy of the License at
-https://www.apache.org/licenses/LICENSE-2.0
-Unless required by applicable law or agreed to in writing, software distributed under the License is
-distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-implied. See the License for the specific language governing permissions and limitations under the
-License.
+SynthSeg training script for claustrum segmentation
+Optimized for NVIDIA RTX 2000 Ada with CUDA 12.x and TensorFlow 2.15
 """
 
-
-# project imports
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from SynthSeg.training import training
+
+import tensorflow as tf
 import numpy as np
+from SynthSeg.training import training
 
+# Configure GPU for TensorFlow 2.15
+print("=== GPU Configuration ===")
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Enable memory growth to avoid OOM errors
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        print(f"Configured {len(gpus)} GPU(s) with memory growth enabled")
+    except RuntimeError as e:
+        print(f"GPU configuration error: {e}")
+else:
+    print("WARNING: No GPUs detected - training will be slow on CPU")
 
+# Paths
+path_training_label_maps = '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/t2w-cor'
+path_model_dir = './models/test'
+os.makedirs(path_model_dir, exist_ok=True)
+# Path to Mauri's pretrained model
+path_checkpoint = '/run/user/1002/gvfs/afp-volume:host=diplab-nas2.unige.ch,volume=VCSF_GROUP/DATA_inProgress/Aaron/claustrum_model_weights/outputs/mauri_unet_weights.h5' 
 
-# path training label maps
-path_training_label_maps = './data/training_label_maps'
-path_model_dir = './outputs/training'
-batchsize = 1
+# Training parameters - optimized for 16GB GPU
+batchsize = 1  # Can increase to 6-8 if memory allows
 
-# architecture parameters
-n_levels = 5           # number of resolution levels
-nb_conv_per_level = 2  # number of convolution per level
-conv_size = 3          # size of the convolution kernel (e.g. 3x3x3)
-unet_feat_count = 24   # number of feature maps after the first convolution
-activation = 'elu'     # activation for all convolution layers except the last, which will use softmax regardless
-feat_multiplier = 2    # if feat_multiplier is set to 1, we will keep the number of feature maps constant throughout the
-#                        network; 2 will double them(resp. half) after each max-pooling (resp. upsampling);
-#                        3 will triple them, etc.
+# Architecture parameters
+n_levels = 5
+nb_conv_per_level = 2
+conv_size = 3
+unet_feat_count = 24
+activation = 'elu'
+feat_multiplier = 2
 
-# training parameters
-lr = 1e-4               # learning rate
-wl2_epochs = 1          # number of pre-training epochs with wl2 metric w.r.t. the layer before the softmax
-dice_epochs = 100       # number of training epochs
-steps_per_epoch = 500  # number of iteration per epoch
+# Training parameters
+lr = 1e-5
+wl2_epochs = 0
+dice_epochs = 50
+steps_per_epoch = 1000
 
+# Generation and segmentation labels
+path_generation_labels = np.array([0, 14, 15, 16, 24, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 138, 139])
+n_neutral_labels = 5
+path_segmentation_labels = np.array([0, 0, 0, 0, 0, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 138, 139])
 
-# ---------- Generation parameters ----------
-# these parameters are from the previous tutorial, and thus we do not explain them again here
-
-# generation and segmentation labels
-path_generation_labels = np.array([0, 24, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 26, 138])
-n_neutral_labels = len(path_generation_labels)
-path_segmentation_labels = np.array([0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 26, 138])
-
-# shape and resolution of the outputs
-target_res = None
-output_shape = (160, 160, 160)
-n_channels = 1
+# Shape and resolution
+target_res = 0.35
+output_shape = (256, 256, 32)  # Adjust based on your data
+n_channels = 4
 
 # GMM sampling
 prior_distributions = 'uniform'
-path_generation_classes = np.array([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22])
+path_generation_classes = np.array([0, 3, 3, 10, 3, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 15])
 
-# spatial deformation parameters
-flipping = True
-scaling_bounds = .2
-rotation_bounds = 15
-shearing_bounds = .012
+# Spatial deformation parameters
+flipping = False
+scaling_bounds = 0.1 # 0.2
+rotation_bounds = 5 # 15
+shearing_bounds = 0.008 # 0.012
 translation_bounds = False
-nonlin_std = 4.
-bias_field_std = .7
+nonlin_std = 2.0 # 4.0
+bias_field_std = 0.3 # 0.7
 
-# acquisition resolution parameters
+# Acquisition resolution parameters
 randomise_res = True
 
-# ------------------------------------------------------ Training ------------------------------------------------------
+print("\n=== Training Configuration ===")
+print(f"Training labels: {path_training_label_maps}")
+print(f"Output directory: {path_model_dir}")
+print(f"Batch size: {batchsize}")
+print(f"Output shape: {output_shape}")
+print(f"Epochs: {dice_epochs}")
+print(f"Steps per epoch: {steps_per_epoch}")
+print("\nStarting training...\n")
 
+# Start training
 training(path_training_label_maps,
          path_model_dir,
          generation_labels=path_generation_labels,
@@ -111,4 +113,5 @@ training(path_training_label_maps,
          lr=lr,
          wl2_epochs=wl2_epochs,
          dice_epochs=dice_epochs,
-         steps_per_epoch=steps_per_epoch)
+         steps_per_epoch=steps_per_epoch,
+         checkpoint=path_checkpoint)

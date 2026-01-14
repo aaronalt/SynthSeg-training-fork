@@ -63,13 +63,13 @@ path_label_map = './data/training_label_maps_claustrum'
 #                               53,   # right hippocampus
 #                               57]   # right lesions
 # Note that plenty of structures are not represented here..... but it's just an example ! :)
-generation_labels = np.array([0, 14, 15, 16, 24, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138]) # Left Hemi
-# generation_labels = np.array([0, 14, 15, 16, 24, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139]) # Right Hemi
+generation_labels = np.array([0, 7, 48, 68, 79, 99, 100, 101, 103, 108, 111, 113, 117, 118, 119, 120, 125, 128, 130, 147, 149, 150, 157, 161, 181, 184, 190, 191, 192, 193, 194, 196, 199, 201, 206, 207, 208, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 232, 234, 238, 240, 242, 243, 244, 245, 246, 252, 253, 254, 255, 256, 268, 274, 275, 276, 277, 278, 279, 282, 283, 284, 285, 286, 295, 297, 298, 301, 303, 305, 306, 307, 309, 310, 312, 313, 314, 315, 316, 320, 321, 322, 326, 339, 340, 341, 342, 343, 344, 345, 346, 347, 349, 350, 352, 354, 364, 365, 367, 368, 369, 370, 371, 372, 373, 374, 375, 377, 378, 379, 380, 381, 382, 384, 385, 393, 394, 395, 396, 397, 398, 399, 404, 405, 407, 408, 409, 410, 411, 412, 414, 418, 419, 420, 421, 422, 423, 424, 425, 426, 430, 432, 435, 441, 442, 443, 444, 454, 458, 461, 465, 478, 479, 484, 492, 493, 496, 498, 504, 506, 508, 517, 519, 521, 541, 558, 559, 561, 562, 563, 564, 565, 566, 567, 568, 569, 575, 576, 578, 580, 611, 811, 813, 843, 2001, 2002, 2003, 2006, 2007, 2009, 2012, 2014, 2015, 2016, 2018, 2019, 2020, 2022, 2023, 2024, 2026, 2027, 2028, 2030, 2031, 2033, 2034, 2035, 138])
 
 # We also have to specify the number of non-sided labels in order to differentiate them from the labels with
 # right/left values.
 # Example: (continuing the previous one): in this example it would be 3 (background, CSF, extra-cerebral soft tissues).
-n_neutral_labels = 5
+# n_neutral_labels = len(generation_labels)
+n_neutral_labels = 224
 
 # By default, the output label maps (i.e. the target segmentations) contain all the labels used for generation.
 # However, we may want not to predict all the generation labels (e.g. extra-cerebral soft tissues).
@@ -81,11 +81,6 @@ n_neutral_labels = 5
 # Note that in this example the labels 24 (CSF), and 507 (extra-cerebral soft tissues) are not predicted, or said
 # differently they are segmented as background.
 # Also, the left and right lesions (labels 25 and 57) are segmented as left and right white matter (labels 2 and 41).
-output_labels = np.array([0, 0, 0, 0, 0, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138]) # Left
-# output_labels = np.array([0, 0, 0, 0, 0, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139]) # Right
-
-
-
 # ---------- Shape and resolution of the outputs ----------
 
 # number of channel to synthesise for multi-modality settings. Set this to 1 (default) in the uni-modality scenario.
@@ -117,8 +112,234 @@ prior_distributions = 'uniform'
 #                                        generation_classes = [0,  1,   2, 3, 4, 5,  4,  6,  7,  8,  9,  8, 10]
 # In this example labels 3 and 17 are in the same *class* 4 (that has nothing to do with *label* 4), and thus will be
 # associated to the same Gaussian distribution when sampling the GMM.
-generation_classes = np.array([0,3,3,10,3,1,2,3,3,4,5,6,7,8,9,11,12,13,14,15]) 
-
+# Tissue type groupings for your labels
+generation_classes = np.array([
+    0,    # 0
+    1,    # 7
+    2,    # 48
+    3,    # 68
+    2,    # 79
+    4,    # 99
+    4,    # 100
+    2,    # 101
+    5,    # 103
+    5,    # 108
+    1,    # 111
+    1,    # 113
+    5,    # 117
+    2,    # 118
+    2,    # 119
+    2,    # 120
+    4,    # 125
+    5,    # 128
+    1,    # 130
+    5,    # 147
+    5,    # 149
+    5,    # 150
+    4,    # 157
+    1,    # 161
+    5,    # 181
+    1,    # 184
+    6,    # 190
+    6,    # 191
+    5,    # 192
+    5,    # 193
+    5,    # 194
+    5,    # 196
+    1,    # 199
+    1,    # 201
+    2,    # 206
+    5,    # 207
+    1,    # 208
+    6,    # 214
+    6,    # 215
+    6,    # 216
+    6,    # 217
+    6,    # 218
+    6,    # 219
+    6,    # 220
+    6,    # 221
+    6,    # 222
+    6,    # 223
+    6,    # 224
+    6,    # 225
+    6,    # 226
+    6,    # 227
+    5,    # 228
+    5,    # 229
+    5,    # 230
+    1,    # 232
+    6,    # 234
+    6,    # 238
+    6,    # 240
+    6,    # 242
+    6,    # 243
+    6,    # 244
+    6,    # 245
+    6,    # 246
+    5,    # 252
+    5,    # 253
+    5,    # 254
+    5,    # 255
+    6,    # 256
+    6,    # 268
+    6,    # 274
+    6,    # 275
+    6,    # 276
+    6,    # 277
+    6,    # 278
+    6,    # 279
+    6,    # 282
+    6,    # 283
+    6,    # 284
+    6,    # 285
+    6,    # 286
+    6,    # 295
+    5,    # 297
+    1,    # 298
+    7,    # 301
+    6,    # 303
+    6,    # 305
+    6,    # 306
+    6,    # 307
+    1,    # 309
+    6,    # 310
+    6,    # 312
+    6,    # 313
+    6,    # 314
+    6,    # 315
+    6,    # 316
+    7,    # 320
+    1,    # 321
+    1,    # 322
+    7,    # 326
+    7,    # 339
+    7,    # 340
+    7,    # 341
+    7,    # 342
+    7,    # 343
+    7,    # 344
+    7,    # 345
+    7,    # 346
+    7,    # 347
+    2,    # 349
+    6,    # 350
+    6,    # 352
+    1,    # 354
+    7,    # 364
+    7,    # 365
+    7,    # 367
+    7,    # 368
+    7,    # 369
+    7,    # 370
+    7,    # 371
+    7,    # 372
+    7,    # 373
+    7,    # 374
+    7,    # 375
+    6,    # 377
+    6,    # 378
+    6,    # 379
+    6,    # 380
+    6,    # 381
+    6,    # 382
+    8,    # 384
+    8,    # 385
+    2,    # 393
+    6,    # 394
+    6,    # 395
+    6,    # 396
+    6,    # 397
+    6,    # 398
+    6,    # 399
+    7,    # 404
+    7,    # 405
+    7,    # 407
+    7,    # 408
+    7,    # 409
+    7,    # 410
+    7,    # 411
+    1,    # 412
+    8,    # 414
+    7,    # 418
+    7,    # 419
+    7,    # 420
+    7,    # 421
+    7,    # 422
+    6,    # 423
+    6,    # 424
+    6,    # 425
+    6,    # 426
+    6,    # 430
+    7,    # 432
+    8,    # 435
+    6,    # 441
+    6,    # 442
+    6,    # 443
+    6,    # 444
+    6,    # 454
+    6,    # 458
+    1,    # 461
+    8,    # 465
+    6,    # 478
+    6,    # 479
+    6,    # 484
+    6,    # 492
+    1,    # 493
+    8,    # 496
+    8,    # 498
+    8,    # 504
+    6,    # 506
+    8,    # 508
+    6,    # 517
+    6,    # 519
+    8,    # 521
+    8,    # 541
+    7,    # 558
+    7,    # 559
+    7,    # 561
+    7,    # 562
+    7,    # 563
+    7,    # 564
+    7,    # 565
+    7,    # 566
+    7,    # 567
+    7,    # 568
+    7,    # 569
+    7,    # 575
+    7,    # 576
+    6,    # 578
+    8,    # 580
+    9,    # 611
+    6,    # 811
+    6,    # 813
+    5,    # 843
+    10,   # 2001
+    10,   # 2002
+    10,   # 2003
+    10,   # 2006
+    10,   # 2007
+    10,   # 2009
+    10,   # 2012
+    10,   # 2014
+    10,   # 2015
+    10,   # 2016
+    10,   # 2018
+    10,   # 2019
+    10,   # 2020
+    10,   # 2022
+    10,   # 2023
+    10,   # 2024
+    10,   # 2026
+    10,   # 2027
+    10,   # 2028
+    10,   # 2030
+    10,   # 2031
+    10,   # 2033
+    10,   # 2034
+    10,   # 2035
+    11    # 138
+])
 # ---------- Spatial augmentation ----------
 
 # We now introduce some parameters concerning the spatial deformation. They enable to set the range of the uniform

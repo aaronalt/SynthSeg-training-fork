@@ -26,8 +26,8 @@ from SynthSeg.training import training
 
 
 # path training label maps
-path_training_label_maps = '../../data/training_label_maps'
-path_model_dir = './outputs_tutorial_3/'
+path_training_label_maps = './data/training_label_maps_claustrum'
+path_model_dir = './outputs/'
 batchsize = 1
 
 # architecture parameters
@@ -43,17 +43,17 @@ feat_multiplier = 2    # if feat_multiplier is set to 1, we will keep the number
 # training parameters
 lr = 1e-4               # learning rate
 wl2_epochs = 1          # number of pre-training epochs with wl2 metric w.r.t. the layer before the softmax
-dice_epochs = 100       # number of training epochs
-steps_per_epoch = 5000  # number of iteration per epoch
+dice_epochs = 20       # number of training epochs
+steps_per_epoch = 1000  # number of iteration per epoch
 
 
 # ---------- Generation parameters ----------
 # these parameters are from the previous tutorial, and thus we do not explain them again here
 
 # generation and segmentation labels
-path_generation_labels = '../../data/labels_classes_priors/generation_labels.npy'
+path_generation_labels = './data/labels_classes_priors/generation_labels.npy'
 n_neutral_labels = 18
-path_segmentation_labels = '../../data/labels_classes_priors/synthseg_segmentation_labels.npy'
+path_segmentation_labels = './data/labels_classes_priors/synthseg_segmentation_labels.npy'
 
 # shape and resolution of the outputs
 target_res = None
@@ -62,7 +62,7 @@ n_channels = 1
 
 # GMM sampling
 prior_distributions = 'uniform'
-path_generation_classes = '../../data/labels_classes_priors/generation_classes.npy'
+path_generation_classes = './data/labels_classes_priors/generation_classes.npy'
 
 # spatial deformation parameters
 flipping = True

@@ -324,7 +324,7 @@ def train_model(model,
 
     # TensorBoard callback
     if metric_type == 'dice':
-        callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False))
+        callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False, update_freq='epoch'))
 
     compile_model = True
     init_epoch = 0
@@ -342,10 +342,10 @@ def train_model(model,
 
     # compile
     if compile_model:
-        model.compile(optimizer=Adam(lr=learning_rate), loss=metrics.IdentityLoss().loss)
+        model.compile(optimizer=tf.keras.optimizers.Adam(lr=learning_rate), loss=metrics.IdentityLoss().loss)
 
     # fit
-    model.fit_generator(generator,
+    model.fit(generator,
                         epochs=n_epochs,
                         steps_per_epoch=n_steps,
                         callbacks=callbacks,

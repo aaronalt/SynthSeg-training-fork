@@ -11,6 +11,7 @@ import tensorflow as tf
 import numpy as np
 from SynthSeg.training import training
 from create_train_test_split import create_train_test_split
+from standardize_labels import standardize_training_labels
 
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
@@ -42,7 +43,8 @@ train_path, test_path = create_train_test_split(
     verbose=False
 )
 
-path_training_label_maps = str(train_path)
+standardize_training_labels(train_path, train_path)
+path_training_label_maps = train_path
 
 # Pre-trained model
 path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/claustrum_model_weights/outputs/mauri_unet_weights.h5' 
@@ -70,7 +72,7 @@ path_segmentation_labels = np.array([0, 0, 0, 0, 2, 3, 4, 5, 8, 10, 11, 12, 13, 
 
 # Shape and resolution
 target_res = 0.35
-output_shape = (256, 256, 32)  # Adjust based on your data
+output_shape = 160  # Adjust based on your data
 n_channels = 4
 
 # GMM sampling

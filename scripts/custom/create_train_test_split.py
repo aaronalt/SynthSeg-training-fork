@@ -169,7 +169,143 @@ def save_split_info(output_dir, train_files, test_files, args):
     print(f"✓ Saved file lists to {train_list} and {test_list}")
 
 
+def print_summary(train_files, test_files):
+    """Print summary statistics"""
+    
+    print(f"\n{'='*60}")
+    print("SPLIT SUMMARY")
+    print(f"{'='*60}")
+    
+    # Count by source
+    train_by_source = {}
+    test_by_source = {}
+    
+    for f in train_files:
+        train_by_source[f['source']] = train_by_source.get(f['source'], 0) + 1
+    
+    for f in test_files:
+        test_by_source[f['source']] = test_by_source.get(f['source'], 0) + 1
+    
+    print("\nTrain files by source:")
+    for source, count in sorted(train_by_source.items()):
+        print(f"  {source:15s}: {count:3d} files")
+    
+    print("\nTest files by source:")
+    for source, count in sorted(test_by_source.items()):
+        print(f"  {source:15s}: {count:3d} files")
+    
+    print(f"\nTotal train: {len(train_files)}")
+    print(f"Total test:  {len(test_files)}")
+    print(f"Total:       {len(train_files) + len(test_files)}")
+    print(f"{'='*60}\n")
+
+
+def create_train_test_split(base_dir='/training_labels',
+                           subdirs=None,
+                           output_dir='/tmp/training_split',
+                           method='copy',
+                           test_ratio=0.2,
+                           seed=42,
+                           verbose=True):
+    """
+    Create train/test split from multiple label directories.
+    
+    Args:
+        base_dir: Base directory containing subdirectories
+        subdirs: List of subdirectories to combine
+        output_dir: Output directory for train/test split
+        method: 'symlink' or 'copy'
+        test_ratio: Ratio of files for testing (0.0-1.0)
+        seed: Random seed for reproducibility
+        verbose: Print progress messages
+        
+    Returns:
+        tuple: (train_path, test_path) as Path objects, or (None, None) on error
+    """
+    
+    if subdirs is None:
+        subdirs = ['t1w', 't2w-cor', 't2w-tra']
+    
+    if verbose:
+        print(f"\n{'='*60}")
+        print("Creating Train/Test Split for SynthSeg Training")
+        print(f"{'='*60}\n")
+    
+    # Step 1: Collect all files
+    if verbose:
+        print("Step 1: Collecting files...")
+    all_files = collect_all_labels(base_dir, subdirs)
+    
+    if len(all_files) == 0:
+        if verbose:
+            print("\n❌ No files found! Check your base_dir and subdirs.")
+        return None, None
+    
+    if verbose:
+        print(f"\nTotal files collected: {len(all_files)}")
+    
+    # Step 2: Create split
+    if verbose:
+        print("\nStep 2: Creating train/test split...")
+    train_files, test_files = create_split(all_files, test_ratio, seed)
+    
+    # Step 3: Create directories
+    if verbose:
+        print("\nStep 3: Creating output directories...")
+    
+    # For programmatic use, don't prompt - just recreate
+    output_path = Path(output_dir)
+    if output_path.exists():
+        if verbose:
+            print(f"⚠️  Removing existing {output_dir}")
+        shutil.rmtree(output_path)
+    
+    train_path = output_path / 'train'
+    test_path = output_path / 'test'
+    train_path.mkdir(parents=True)
+    test_path.mkdir(parents=True)
+    
+    if verbose:
+        print(f"✓ Created {train_path}")
+        print(f"✓ Created {test_path}")
+    
+    # Step 4: Populate directories
+    if verbose:
+        print(f"\nStep 4: Populating directories using method: {method}")
+    populate_directories(train_files, test_files, train_path, test_path, method)
+    if verbose:
+        print(f"✓ Processed {len(train_files)} train files")
+        print(f"✓ Processed {len(test_files)} test files")
+    
+    # Step 5: Save split information
+    if verbose:
+        print("\nStep 5: Saving split information...")
+    
+    # Create minimal args object for save_split_info
+    class Args:
+        pass
+    args = Args()
+    args.method = method
+    args.test_ratio = test_ratio
+    args.seed = seed
+    
+    save_split_info(output_dir, train_files, test_files, args)
+    
+    # Step 6: Print summary
+    if verbose:
+        print_summary(train_files, test_files)
+        print("="*60)
+        print("✓ Split created successfully!")
+        print("="*60)
+        print(f"\nTrain path: {train_path}")
+        print(f"Test path:  {test_path}")
+        print("="*60 + "\n")
+    
+    return train_path, test_path
+
+
 def main():
+    """Command-line interface"""
     parser = argparse.ArgumentParser(
         description='Combine training labels and create train/test split'
     )
@@ -220,30 +356,17 @@ def main():
     
     args = parser.parse_args()
     
-    print(f"\n{'='*60}")
-    print("Creating Train/Test Split for SynthSeg Training")
-    print(f"{'='*60}\n")
-    
-    # Step 1: Collect all files
-    all_files = collect_all_labels(args.base_dir, args.subdirs)
-    if len(all_files) == 0:
-        print("No files found! Check your base_dir and subdirs.")
-        return
+    # Call the main function
+    create_train_test_split(
+        base_dir=args.base_dir,
+        subdirs=args.subdirs,
+        output_dir=args.output_dir,
+        method=args.method,
+        test_ratio=args.test_ratio,
+        seed=args.seed,
+        verbose=True
+    )
 
-    # Step 2: Create split
-    train_files, test_files = create_split(all_files, args.test_ratio, args.seed)
-    
-    # Step 3: Create directories
-    train_path, test_path = create_directories(args.output_dir, args.method)
-    
-    if train_path is None:
-        return
-    
-    # Step 4: Populate directories
-    populate_directories(train_files, test_files, train_path, test_path, args.method)
-    
-    # Step 5: Save split information
-    save_split_info(args.output_dir, train_files, test_files, args)
 
 if __name__ == '__main__':
     main()

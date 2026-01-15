@@ -10,7 +10,7 @@ import datetime
 import tensorflow as tf
 import numpy as np
 from SynthSeg.training import training
-from create_train_test_split import *
+from create_train_test_split import create_train_test_split
 
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
@@ -29,7 +29,7 @@ experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S'
 path_model_dir = os.path.join('./models/test', experiment_name)
 os.makedirs(path_model_dir, exist_ok=True)
 log_dir = os.path.join(path_model_dir, 'logs')
-utils.mkdir(log_dir)
+os.makedirs(log_dir, exist_ok=True)
 
 # Split into train/test
 train_path, test_path = create_train_test_split(

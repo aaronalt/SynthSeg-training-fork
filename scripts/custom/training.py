@@ -10,6 +10,7 @@ import datetime
 import tensorflow as tf
 import numpy as np
 from SynthSeg.training import training
+from create_train_test_split import *
 
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
@@ -23,12 +24,25 @@ if gpus:
         print(f"GPU configuration error: {e}")
 
 # Paths
-path_training_label_maps = '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/t2w-cor'
+training_label_maps = '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels'
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 path_model_dir = os.path.join('./models/test', experiment_name)
 os.makedirs(path_model_dir, exist_ok=True)
 log_dir = os.path.join(path_model_dir, 'logs')
 utils.mkdir(log_dir)
+
+# Split into train/test
+train_path, test_path = create_train_test_split(
+    base_dir=training_label_maps,
+    subdirs=['t1w', 't2w-cor', 't2w-tra'],
+    output_dir='/tmp/training_split',
+    method='copy',
+    test_ratio=0.2,
+    seed=42,
+    verbose=False
+)
+
+path_training_label_maps = str(train_path)
 
 # Pre-trained model
 path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/claustrum_model_weights/outputs/mauri_unet_weights.h5' 

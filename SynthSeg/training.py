@@ -28,6 +28,7 @@ import keras.callbacks as KC
 from keras.optimizers import Adam
 from inspect import getmembers, isclass
 from tensorflow.keras.callbacks import Callback
+from tensorflow.keras import layers
 
 # project imports
 from SynthSeg import metrics_model as metrics
@@ -344,6 +345,20 @@ def training(labels_dir,
         expected_num_classes=len(segmentation_labels)
     )
 
+    def apply_normalization(model):
+        # This creates a new model that normalizes the input first
+        inputs = layers.Input(shape=(160, 160, 160, 1))
+
+        # We use a Lambda layer to do the math: (x - mean) / std
+        # We use your diagnostic mean (38.5) and a typical std for this data
+        # (If you don't know the std, use np.std(x_sample) from your diagnostic)
+
+        x = layers.Lambda(lambda t: (t - 38.5) / 30.0)(inputs)
+
+        # Connect the rest of your unet_model
+        outputs = model(x)
+        return tf.keras.Model(inputs, outputs)
+
     # 1. Grab one batch
     batch = next(input_generator)
     # In SynthSeg, batch[0] is a list of inputs, batch[1] is a list of targets
@@ -379,6 +394,7 @@ def training(labels_dir,
     if wl2_epochs > 0:
         # 2. Create the warm-up model
         ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
+        ce_model = apply_normalization(ce_model)
         # 3. Compile with Categorical Crossentropy instead of 'wl2'
         # 4. Train the frozen model
         train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,

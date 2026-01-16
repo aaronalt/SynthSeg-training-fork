@@ -73,7 +73,7 @@ path_segmentation_labels = np.array([0, 0, 0, 0, 2, 3, 4, 5, 8, 10, 11, 12, 13, 
 # Shape and resolution
 target_res = 0.35
 output_shape = 160  # Adjust based on your data
-n_channels = 4
+n_channels = 1
 
 # GMM sampling
 prior_distributions = 'uniform'

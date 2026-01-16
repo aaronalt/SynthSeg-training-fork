@@ -345,18 +345,25 @@ def training(labels_dir,
         expected_num_classes=len(segmentation_labels)
     )
 
-    def add_norm_to_model(model, mean, std):
-        inputs = tf.keras.Input(shape=(160, 160, 160, 1))
-        # Standard Z-score: (x - mean) / std
-        x = tf.keras.layers.Lambda(lambda t: (t - mean) / (std + 1e-5))(inputs)
-        outputs = model(x)
-        return tf.keras.Model(inputs, outputs)
+    def normalized_generator(gen, mean, std):
+        for batch in gen:
+            # batch[0] is the list of inputs: [image, extra_input_1, extra_input_2]
+            # We only normalize the first input (the MRI image)
+            image = batch[0][0]
 
+            # Apply Z-score: (x - mean) / std
+            normalized_image = (image - mean) / (std + 1e-5)
+
+            # Put it back into the batch structure
+            batch[0][0] = normalized_image
+            yield batch
+
+    base_gen = input_generator
     # 1. Grab one batch
     batch = next(input_generator)
     # In SynthSeg, batch[0] is a list of inputs, batch[1] is a list of targets
     x_sample = batch[0][0]  # Get the actual 4D array from the list
-
+    input_generator = normalized_generator(base_gen, mean=1.3, std=6.4)
     # 2. Check the intensity range
     print(f"\n--- Diagnostic Check ---")
     print(f"Input Shape: {x_sample.shape}")
@@ -388,7 +395,6 @@ def training(labels_dir,
     if wl2_epochs > 0:
         # 2. Create the warm-up model
         ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
-        ce_model = add_norm_to_model(ce_model, mean=38.5, std=30.0)
         # 3. Compile with Categorical Crossentropy instead of 'wl2'
         # 4. Train the frozen model
         train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,

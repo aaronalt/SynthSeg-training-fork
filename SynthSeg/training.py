@@ -309,18 +309,8 @@ def training(labels_dir,
         checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
     '''
 
-    def print_model_stats(model, stage_name):
-        trainable_count = np.sum([K.count_params(w) for w in model.trainable_weights])
-        non_trainable_count = np.sum([K.count_params(w) for w in model.non_trainable_weights])
-        print(f"\n{'=' * 30}")
-        print(f"STAGE: {stage_name}")
-        print(f"Trainable params: {trainable_count:,}")
-        print(f"Non-trainable params: {non_trainable_count:,}")
-        print(f"{'=' * 30}\n")
-
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
-    print_model_stats(unet_model, "WARM-UP (FROZEN)")
     for layer in unet_model.layers:
         if 'unet' in layer.name and 'likelihood' not in layer.name:
             layer.trainable = False
@@ -335,7 +325,6 @@ def training(labels_dir,
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
     unet_model.trainable = True
-    print_model_stats(unet_model, "FINE-TUNING (UNFROZEN)")
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')
     # IMPORTANT: Use a MUCH smaller learning rate for fine-tuning (e.g., 1/10th or 1/100th of lr)
     fine_tune_lr = lr / 10

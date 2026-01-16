@@ -364,29 +364,7 @@ def training(labels_dir,
             yield batch
 
     input_generator = dynamic_normalized_generator(input_generator)
-    # 1. Grab one batch
-    batch = next(input_generator)
-    # In SynthSeg, batch[0] is a list of inputs, batch[1] is a list of targets
-    x_sample = batch[0][0]  # Get the actual 4D array from the list
-    # 2. Check the intensity range
-    print(f"\n--- Diagnostic Check ---")
-    print(f"Input Shape: {x_sample.shape}")
-    print(f"Max Intensity: {np.max(x_sample):.4f}")
-    print(f"Min Intensity: {np.min(x_sample):.4f}")
-    print(f"Mean Intensity: {np.mean(x_sample):.4f}")
-    print(f"Standard Deviation: {np.std(x_sample):.4f}")
-
-    # 3. COMPARE TO PRE-TRAINED EXPECTATIONS
-    # We need to see if the BN layers expect [0, 1] or Z-score
-    # Use any layer name from your model.summary() that contains 'bn'
-    try:
-        # Try a common SynthSeg BN layer name
-        bn_layer = unet_model.get_layer('unet_bn_down_2')
-        weights = bn_layer.get_weights()
-        # Index 2 is moving_mean, Index 3 is moving_variance
-        print(f"Model Expects Mean: {np.mean(weights[2]):.4f}")
-    except:
-        print("Could not find BN layer; check model.summary() for layer names.")
+    val_gen = dynamic_normalized_generator(validation_generator)
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
@@ -468,4 +446,6 @@ def train_model(model,
                         epochs=n_epochs,
                         steps_per_epoch=n_steps,
                         callbacks=callbacks,
-                        initial_epoch=init_epoch)
+                        initial_epoch=init_epoch,
+                        validation_data=val_gen,
+                        validation_steps=10)

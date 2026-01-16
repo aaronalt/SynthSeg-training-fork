@@ -401,8 +401,8 @@ def training(labels_dir,
 
             yield batch
     '''
-    input_generator = dynamic_normalized_generator(input_generator)
-    val_gen = dynamic_normalized_generator(input_generator)
+    # input_generator = dynamic_normalized_generator(input_generator)
+    # val_gen = dynamic_normalized_generator(input_generator)
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
@@ -418,7 +418,7 @@ def training(labels_dir,
         # 3. Compile with Categorical Crossentropy instead of 'wl2'
         # 4. Train the frozen model
         train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,
-                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg], val_gen=val_gen)
+                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
         checkpoint = os.path.join(model_dir, 'ce_warmup_%03d.h5' % wl2_epochs)
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
@@ -431,7 +431,7 @@ def training(labels_dir,
     # IMPORTANT: Use a MUCH smaller learning rate for fine-tuning (e.g., 1/10th or 1/100th of lr)
     fine_tune_lr = lr / 10
     train_model(dice_model, input_generator, fine_tune_lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=True, val_gen=val_gen, extra_callbacks=[discovery_cfg])
+                model_dir, 'dice', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
 
 
 def train_model(model,
@@ -443,8 +443,7 @@ def train_model(model,
                 metric_type,
                 path_checkpoint=None,
                 reinitialise_momentum=False,
-                extra_callbacks=None,
-                val_gen=None):
+                extra_callbacks=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -485,6 +484,4 @@ def train_model(model,
                         epochs=n_epochs,
                         steps_per_epoch=n_steps,
                         callbacks=callbacks,
-                        initial_epoch=init_epoch,
-                        validation_data=val_gen,
-                        validation_steps=10)
+                        initial_epoch=init_epoch)

@@ -27,6 +27,7 @@ from keras import models
 import keras.callbacks as KC
 from keras.optimizers import Adam
 from inspect import getmembers, isclass
+from tensorflow.keras.callbacks import Callback
 
 # project imports
 from SynthSeg import metrics_model as metrics
@@ -37,6 +38,35 @@ from ext.lab2im import utils, layers
 from ext.neuron import layers as nrn_layers
 from ext.neuron import models as nrn_models
 
+
+class ClassDiscoveryCallback(Callback):
+    def __init__(self, validation_generator, expected_num_classes):
+        super(ClassDiscoveryCallback, self).__init__()
+        self.validation_generator = validation_generator
+        self.expected_num_classes = expected_num_classes
+
+    def on_epoch_end(self, epoch, logs=None):
+        # 1. Grab one batch from the generator
+        # Note: If your generator is a directory iterator, use next(self.validation_generator)
+        # If it's a tf.data.Dataset, use next(iter(self.validation_generator))
+        try:
+            x_val, y_val = next(iter(self.validation_generator))
+        except StopIteration:
+            return  # Skip if generator is empty
+
+        # 2. Get predictions for this batch
+        preds = self.model.predict(x_val, verbose=0)
+
+        # 3. Convert probabilities to class indices (Argmax)
+        # Assuming shape is (Batch, D, H, W, Classes)
+        pred_labels = np.argmax(preds, axis=-1)
+
+        # 4. Count unique classes found in the prediction
+        unique_found = np.unique(pred_labels)
+        num_found = len(unique_found)
+
+        print(f"\n[Monitor] Epoch {epoch + 1}: Found {num_found}/{self.expected_num_classes} classes.")
+        print(f"[Monitor] Labels currently visible: {unique_found}")
 
 def training(labels_dir,
              model_dir,
@@ -309,7 +339,10 @@ def training(labels_dir,
         checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
     '''
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
-
+    discovery_cfg = ClassDiscoveryCallback(
+        validation_generator=input_generator,
+        expected_num_classes=len(segmentation_labels)
+    )
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
     for layer in unet_model.layers:
@@ -323,7 +356,7 @@ def training(labels_dir,
         # 3. Compile with Categorical Crossentropy instead of 'wl2'
         # 4. Train the frozen model
         train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,
-                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True)
+                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
         checkpoint = os.path.join(model_dir, 'ce_warmup_%03d.h5' % wl2_epochs)
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
@@ -343,7 +376,8 @@ def train_model(model,
                 model_dir,
                 metric_type,
                 path_checkpoint=None,
-                reinitialise_momentum=False):
+                reinitialise_momentum=False,
+                extra_callbacks=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -353,6 +387,9 @@ def train_model(model,
     # model saving callback
     save_file_name = os.path.join(model_dir, '%s_{epoch:03d}.h5' % metric_type)
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1)]
+
+    if extra_callbacks:
+        callbacks.extend(extra_callbacks)
 
     # TensorBoard callback
     if metric_type == 'dice':

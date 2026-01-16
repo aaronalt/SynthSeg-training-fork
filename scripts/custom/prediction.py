@@ -30,9 +30,9 @@ path_vol = '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmenta
 gt_folder = None  # '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/claustrum_manual_labels/validation'
 
 # Model and labels
-path_model = './models/test/dice_030.h5'
-path_segmentation_labels = './data/segmentation_labels.npy'
-path_topology_classes = './data/topology_classes.npy'
+path_model = './models/test/experiment_20260115_124240/dice_050.h5'
+path_segmentation_labels = './data/labels_classes_priors/segmentation_labels.npy'
+path_topology_classes = './data/labels_classes_priors/topology_classes.npy'
 
 # Create output directories
 os.makedirs(path_segm, exist_ok=True)
@@ -40,8 +40,8 @@ os.makedirs(path_posteriors, exist_ok=True)
 os.makedirs(path_resampled, exist_ok=True)
 
 # Parameters (must match training!)
-n_neutral_labels = 5
-cropping = 192
+n_neutral_labels = 4
+cropping = None
 target_res = 0.35
 flip = False
 sigma_smoothing = 0.5

@@ -12,6 +12,7 @@ from SynthSeg.predict import predict
 import numpy as np
 from glob import glob
 import datetime
+from utils import SynthMorphFiles, ClaustrumWarper
 
 # Save label arrays to files (do this once)
 os.makedirs('./data', exist_ok=True)
@@ -24,14 +25,14 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Paths
 path_images = '/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/validation'
-path_segm = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/experiment_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
-path_posteriors = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/experiment_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/posteriors'
-path_resampled = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/experiment_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/resampled'
-path_vol = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/experiment_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/volumes.csv'
+path_segm = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/prediction_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
+path_posteriors = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/prediction_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/posteriors'
+path_resampled = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/prediction_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/resampled'
+path_vol = f'/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/7T/Nifti/derivatives/segmentations/prediction_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/volumes.csv'
 gt_folder = None  # '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/claustrum_manual_labels/validation'
 
 # Model and labels
-path_model = '/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/models/dice_012.h5'
+path_model = '/Volumes/VCSF_GROUP/DATA_inProgress/Aaron/models/dice_050.h5'
 path_segmentation_labels = './data/labels_classes_priors/segmentation_labels.npy'
 path_topology_classes = './data/labels_classes_priors/topology_classes.npy'
 
@@ -42,7 +43,7 @@ os.makedirs(path_resampled, exist_ok=True)
 
 # Parameters (must match training!)
 n_neutral_labels = 4
-cropping = 192
+cropping = None
 target_res = 0.35
 flip = False
 sigma_smoothing = 0.5

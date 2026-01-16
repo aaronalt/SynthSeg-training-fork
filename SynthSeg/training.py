@@ -363,7 +363,7 @@ def training(labels_dir,
     batch = next(input_generator)
     # In SynthSeg, batch[0] is a list of inputs, batch[1] is a list of targets
     x_sample = batch[0][0]  # Get the actual 4D array from the list
-    input_generator = normalized_generator(base_gen, mean=1.3, std=6.4)
+    input_generator = normalized_generator(base_gen, mean=41.6, std=10.5)
     # 2. Check the intensity range
     print(f"\n--- Diagnostic Check ---")
     print(f"Input Shape: {x_sample.shape}")

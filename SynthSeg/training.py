@@ -350,6 +350,7 @@ def training(labels_dir,
             layer.trainable = False
         if isinstance(layer, tf.keras.layers.BatchNormalization):
             layer.training = False
+            layer.trainable = False
     if wl2_epochs > 0:
         # 2. Create the warm-up model
         ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])

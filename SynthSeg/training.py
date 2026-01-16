@@ -38,7 +38,7 @@ from SynthSeg.brain_generator import BrainGenerator
 from ext.lab2im import utils, layers
 from ext.neuron import layers as nrn_layers
 from ext.neuron import models as nrn_models
-
+import threading
 
 class ClassDiscoveryCallback(Callback):
     def __init__(self, validation_generator, expected_num_classes):
@@ -68,6 +68,7 @@ class ClassDiscoveryCallback(Callback):
 
         print(f"\n[Monitor] Epoch {epoch + 1}: Found {num_found}/{self.expected_num_classes} classes.")
         print(f"[Monitor] Labels currently visible: {unique_found}")
+
 
 def training(labels_dir,
              model_dir,
@@ -341,11 +342,47 @@ def training(labels_dir,
     '''
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
+    # --- STEP 1: Define the Thread-Safe Wrapper ---
+    # Put this inside the training() function or just above it
+    class ThreadSafeDynamicGenerator:
+        def __init__(self, gen):
+            self.gen = gen
+            self.lock = threading.Lock()
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            with self.lock:
+                batch = next(self.gen)
+                # batch[0][0] is the 3D MRI volume
+                image = batch[0][0]
+
+                # Dynamic Z-score normalization per volume
+                batch_mean = np.mean(image)
+                batch_std = np.std(image)
+                normalized_image = (image - batch_mean) / (batch_std + 1e-5)
+
+                batch[0][0] = normalized_image
+                return batch
+
+    # --- STEP 2: Create TWO separate stream instances ---
+    # We create two base generators so they don't fight for the same data
+    base_train_gen = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
+    base_val_gen = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
+
+    # Wrap them both
+    input_generator = ThreadSafeDynamicGenerator(base_train_gen)
+    val_gen = ThreadSafeDynamicGenerator(base_val_gen)
+
+    # --- STEP 3: Update Callback ---
+    # Ensure your discovery monitor uses the new val_gen
     discovery_cfg = ClassDiscoveryCallback(
-        validation_generator=input_generator,
-        expected_num_classes=len(segmentation_labels)
+        validation_generator=val_gen,
+        expected_num_classes=n_segmentation_labels
     )
 
+    '''
     def dynamic_normalized_generator(gen):
         for batch in gen:
             # batch[0][0] is the 3D MRI volume [Batch, D, H, W, 1]
@@ -363,7 +400,7 @@ def training(labels_dir,
             batch[0][0] = normalized_image
 
             yield batch
-
+    '''
     input_generator = dynamic_normalized_generator(input_generator)
     val_gen = dynamic_normalized_generator(input_generator)
 

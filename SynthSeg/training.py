@@ -343,25 +343,6 @@ def training(labels_dir,
     '''
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
-    def simple_norm_gen(generator):
-        for batch in generator:
-            # 1. Grab the image
-            img = batch[0][0]
-            # 2. Force it to Mean 0, Std 1 (The "Volume Knob")
-            img = (img - np.mean(img)) / (np.std(img) + 1e-5)
-            # 3. Put it back
-            batch[0][0] = img
-            yield batch
-
-    input_generator = simple_norm_gen(base_generator)
-
-    # --- STEP 3: Update Callback ---
-    discovery_cfg = ClassDiscoveryCallback(
-        validation_generator=input_generator,
-        expected_num_classes=n_segmentation_labels
-    )
-
-    '''
     def dynamic_normalized_generator(gen):
         for batch in gen:
             # batch[0][0] is the 3D MRI volume [Batch, D, H, W, 1]
@@ -379,9 +360,14 @@ def training(labels_dir,
             batch[0][0] = normalized_image
 
             yield batch
-    '''
-    # input_generator = dynamic_normalized_generator(input_generator)
+
+    input_generator = dynamic_normalized_generator(input_generator)
     # val_gen = dynamic_normalized_generator(input_generator)
+
+    discovery_cfg = ClassDiscoveryCallback(
+        validation_generator=input_generator,
+        expected_num_classes=n_segmentation_labels
+    )
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)

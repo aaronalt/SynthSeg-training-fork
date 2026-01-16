@@ -345,20 +345,25 @@ def training(labels_dir,
         expected_num_classes=len(segmentation_labels)
     )
 
-    def normalized_generator(gen, mean, std):
+    def dynamic_normalized_generator(gen):
         for batch in gen:
-            # batch[0] is the list of inputs: [image, extra_input_1, extra_input_2]
-            # We only normalize the first input (the MRI image)
+            # batch[0][0] is the 3D MRI volume [Batch, D, H, W, 1]
             image = batch[0][0]
 
-            # Apply Z-score: (x - mean) / std
-            normalized_image = (image - mean) / (std + 1e-5)
+            # Calculate stats for the CURRENT volume
+            batch_mean = np.mean(image)
+            batch_std = np.std(image)
 
-            # Put it back into the batch structure
+            # Apply Z-score dynamically
+            # We add 1e-5 to avoid division by zero if the image is blank
+            normalized_image = (image - batch_mean) / (batch_std + 1e-5)
+
+            # Update the batch with the normalized data
             batch[0][0] = normalized_image
+
             yield batch
 
-    base_gen = input_generator
+    input_generator = dynamic_normalized_generator(input_generator)
     # 1. Grab one batch
     batch = next(input_generator)
     # In SynthSeg, batch[0] is a list of inputs, batch[1] is a list of targets

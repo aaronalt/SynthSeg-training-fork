@@ -340,6 +340,7 @@ def training(labels_dir,
         checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
     '''
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
+
     discovery_cfg = ClassDiscoveryCallback(
         validation_generator=input_generator,
         expected_num_classes=len(segmentation_labels)
@@ -380,7 +381,7 @@ def training(labels_dir,
         # 3. Compile with Categorical Crossentropy instead of 'wl2'
         # 4. Train the frozen model
         train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,
-                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
+                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg], val_gen=val_gen)
         checkpoint = os.path.join(model_dir, 'ce_warmup_%03d.h5' % wl2_epochs)
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
@@ -393,7 +394,7 @@ def training(labels_dir,
     # IMPORTANT: Use a MUCH smaller learning rate for fine-tuning (e.g., 1/10th or 1/100th of lr)
     fine_tune_lr = lr / 10
     train_model(dice_model, input_generator, fine_tune_lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=True)
+                model_dir, 'dice', checkpoint, reinitialise_momentum=True, val_gen=val_gen, extra_callbacks=[discovery_cfg])
 
 
 def train_model(model,
@@ -405,7 +406,8 @@ def train_model(model,
                 metric_type,
                 path_checkpoint=None,
                 reinitialise_momentum=False,
-                extra_callbacks=None):
+                extra_callbacks=None,
+                val_gen=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)

@@ -345,17 +345,10 @@ def training(labels_dir,
         expected_num_classes=len(segmentation_labels)
     )
 
-    def apply_normalization(model):
-        # This creates a new model that normalizes the input first
-        inputs = layers.Input(shape=(160, 160, 160, 1))
-
-        # We use a Lambda layer to do the math: (x - mean) / std
-        # We use your diagnostic mean (38.5) and a typical std for this data
-        # (If you don't know the std, use np.std(x_sample) from your diagnostic)
-
-        x = layers.Lambda(lambda t: (t - 38.5) / 30.0)(inputs)
-
-        # Connect the rest of your unet_model
+    def add_norm_to_model(model, mean, std):
+        inputs = tf.keras.Input(shape=(160, 160, 160, 1))
+        # Standard Z-score: (x - mean) / std
+        x = tf.keras.layers.Lambda(lambda t: (t - mean) / (std + 1e-5))(inputs)
         outputs = model(x)
         return tf.keras.Model(inputs, outputs)
 
@@ -370,6 +363,7 @@ def training(labels_dir,
     print(f"Max Intensity: {np.max(x_sample):.4f}")
     print(f"Min Intensity: {np.min(x_sample):.4f}")
     print(f"Mean Intensity: {np.mean(x_sample):.4f}")
+    print(f"Standard Deviation: {np.std(x_sample):.4f}")
 
     # 3. COMPARE TO PRE-TRAINED EXPECTATIONS
     # We need to see if the BN layers expect [0, 1] or Z-score
@@ -394,7 +388,7 @@ def training(labels_dir,
     if wl2_epochs > 0:
         # 2. Create the warm-up model
         ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
-        ce_model = apply_normalization(ce_model)
+        ce_model = add_norm_to_model(ce_model, mean=38.5, std=30.0)
         # 3. Compile with Categorical Crossentropy instead of 'wl2'
         # 4. Train the frozen model
         train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,

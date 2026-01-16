@@ -343,6 +343,25 @@ def training(labels_dir,
         validation_generator=input_generator,
         expected_num_classes=len(segmentation_labels)
     )
+
+    # Pick any BN layer from the middle of the encoder
+    bn_layer = unet_model.get_layer('unet_bn_down_2')  # Adjust name if different
+    weights = bn_layer.get_weights()
+
+    # BN weights order: [gamma, beta, moving_mean, moving_variance]
+    moving_mean = np.mean(weights[2])
+    moving_var = np.mean(weights[3])
+
+    print(f"Pre-trained Expectations:")
+    print(f" - Expected Mean: {moving_mean:.4f}")
+    print(f" - Expected Variance: {moving_var:.4f}")
+
+    # Now compare to your current synthetic data
+    x_sample, _ = next(iter(input_generator))
+    print(f"\nYour Synthetic Data:")
+    print(f" - Current Mean: {np.mean(x_sample):.4f}")
+    print(f" - Current Max: {np.max(x_sample):.4f}")
+
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
     for layer in unet_model.layers:
@@ -362,6 +381,10 @@ def training(labels_dir,
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
     unet_model.trainable = True
+    for layer in unet_model.layers:
+        if isinstance(layer, tf.keras.layers.BatchNormalization):
+            layer.training = True
+            layer.trainable = True
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')
     # IMPORTANT: Use a MUCH smaller learning rate for fine-tuning (e.g., 1/10th or 1/100th of lr)
     fine_tune_lr = lr / 10

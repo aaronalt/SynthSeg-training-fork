@@ -348,6 +348,18 @@ def training(labels_dir,
     bn_layer = unet_model.get_layer('unet_bn_down_2')  # Adjust name if different
     weights = bn_layer.get_weights()
 
+    # Grab one batch
+    batch = next(iter(input_generator))
+    x_sample = batch[0]
+
+    # Force conversion to a standard float32 numpy array to avoid "ragged" errors
+    x_as_array = np.array(x_sample).astype('float32')
+
+    print(f"Your Synthetic Data:")
+    print(f" - Current Mean: {np.mean(x_as_array):.4f}")
+    print(f" - Current Max: {np.max(x_as_array):.4f}")
+    print(f" - Current Min: {np.min(x_as_array):.4f}")
+    
     # BN weights order: [gamma, beta, moving_mean, moving_variance]
     moving_mean = np.mean(weights[2])
     moving_var = np.mean(weights[3])

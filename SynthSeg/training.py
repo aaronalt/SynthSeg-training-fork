@@ -364,7 +364,7 @@ def training(labels_dir,
             yield batch
 
     input_generator = dynamic_normalized_generator(input_generator)
-    val_gen = dynamic_normalized_generator(validation_generator)
+    val_gen = dynamic_normalized_generator(input_generator)
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)

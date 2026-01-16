@@ -29,6 +29,7 @@ from keras.optimizers import Adam
 from inspect import getmembers, isclass
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import layers
+from keras.utils import Sequence
 
 # project imports
 from SynthSeg import metrics_model as metrics
@@ -342,43 +343,21 @@ def training(labels_dir,
     '''
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
-    # --- STEP 1: Define the Thread-Safe Wrapper ---
-    # Put this inside the training() function or just above it
-    class ThreadSafeDynamicGenerator:
-        def __init__(self, gen):
-            self.gen = gen
-            self.lock = threading.Lock()
+    def simple_norm_gen(generator):
+        for batch in generator:
+            # 1. Grab the image
+            img = batch[0][0]
+            # 2. Force it to Mean 0, Std 1 (The "Volume Knob")
+            img = (img - np.mean(img)) / (np.std(img) + 1e-5)
+            # 3. Put it back
+            batch[0][0] = img
+            yield batch
 
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            with self.lock:
-                batch = next(self.gen)
-                # batch[0][0] is the 3D MRI volume
-                image = batch[0][0]
-
-                # Dynamic Z-score normalization per volume
-                batch_mean = np.mean(image)
-                batch_std = np.std(image)
-                normalized_image = (image - batch_mean) / (batch_std + 1e-5)
-
-                batch[0][0] = normalized_image
-                return batch
-
-    # --- STEP 2: Create TWO separate stream instances ---
-    # We create two base generators so they don't fight for the same data
-    base_train_gen = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
-    base_val_gen = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
-
-    # Wrap them both
-    input_generator = ThreadSafeDynamicGenerator(base_train_gen)
-    val_gen = ThreadSafeDynamicGenerator(base_val_gen)
+    input_generator = simple_norm_gen(base_generator)
 
     # --- STEP 3: Update Callback ---
-    # Ensure your discovery monitor uses the new val_gen
     discovery_cfg = ClassDiscoveryCallback(
-        validation_generator=val_gen,
+        validation_generator=input_generator,
         expected_num_classes=n_segmentation_labels
     )
 
@@ -484,4 +463,6 @@ def train_model(model,
                         epochs=n_epochs,
                         steps_per_epoch=n_steps,
                         callbacks=callbacks,
-                        initial_epoch=init_epoch)
+                        initial_epoch=init_epoch,
+                        workers=1,
+                        use_multiprocessing=False)

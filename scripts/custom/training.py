@@ -60,10 +60,10 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-5
-wl2_epochs = 0
-dice_epochs = 50
-steps_per_epoch = 500
+lr = 1e-4
+wl2_epochs = 2
+dice_epochs = 10
+steps_per_epoch = 100
 
 # Generation and segmentation labels
 path_generation_labels = np.array([0, 14, 16, 24, 2, 3, 4, 5, 8, 10, 11, 12, 13, 17, 18, 26, 28, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 138, 139])
@@ -81,12 +81,12 @@ path_generation_classes = np.array([0, 3, 10, 3, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 1
 
 # Spatial deformation parameters
 flipping = False
-scaling_bounds = 0.1 # 0.2
-rotation_bounds = 5 # 15
-shearing_bounds = 0.008 # 0.012
+scaling_bounds = 0.2
+rotation_bounds = 15
+shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 2.0 # 4.0
-bias_field_std = 0.3 # 0.7
+nonlin_std = 4.0
+bias_field_std = 0.7
 
 # Acquisition resolution parameters
 randomise_res = True

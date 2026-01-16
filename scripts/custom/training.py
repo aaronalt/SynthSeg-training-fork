@@ -61,8 +61,8 @@ feat_multiplier = 2
 
 # Training parameters
 lr = 1e-4
-wl2_epochs = 2
-dice_epochs = 10
+wl2_epochs = 30
+dice_epochs = 100
 steps_per_epoch = 100
 
 # Generation and segmentation labels

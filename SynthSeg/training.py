@@ -308,12 +308,15 @@ def training(labels_dir,
         # Update checkpoint path for the next phase
         checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
     '''
+    unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
     for layer in unet_model.layers:
         if 'unet' in layer.name and 'likelihood' not in layer.name:
             layer.trainable = False
+        if isinstance(layer, tf.keras.layers.BatchNormalization):
+            layer.training = False
     if wl2_epochs > 0:
         # 2. Create the warm-up model
         ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])

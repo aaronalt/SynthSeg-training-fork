@@ -344,35 +344,29 @@ def training(labels_dir,
         expected_num_classes=len(segmentation_labels)
     )
 
-    # Pick any BN layer from the middle of the encoder
-    bn_layer = unet_model.get_layer('unet_bn_down_2')  # Adjust name if different
-    weights = bn_layer.get_weights()
+    # 1. Grab one batch
+    batch = next(input_generator)
+    # In SynthSeg, batch[0] is a list of inputs, batch[1] is a list of targets
+    x_sample = batch[0][0]  # Get the actual 4D array from the list
 
-    # Grab one batch
-    batch = next(iter(input_generator))
-    x_sample = batch[0]
+    # 2. Check the intensity range
+    print(f"\n--- Diagnostic Check ---")
+    print(f"Input Shape: {x_sample.shape}")
+    print(f"Max Intensity: {np.max(x_sample):.4f}")
+    print(f"Min Intensity: {np.min(x_sample):.4f}")
+    print(f"Mean Intensity: {np.mean(x_sample):.4f}")
 
-    # Force conversion to a standard float32 numpy array to avoid "ragged" errors
-    x_as_array = np.array(x_sample).astype('float32')
-
-    print(f"Your Synthetic Data:")
-    print(f" - Current Mean: {np.mean(x_as_array):.4f}")
-    print(f" - Current Max: {np.max(x_as_array):.4f}")
-    print(f" - Current Min: {np.min(x_as_array):.4f}")
-    
-    # BN weights order: [gamma, beta, moving_mean, moving_variance]
-    moving_mean = np.mean(weights[2])
-    moving_var = np.mean(weights[3])
-
-    print(f"Pre-trained Expectations:")
-    print(f" - Expected Mean: {moving_mean:.4f}")
-    print(f" - Expected Variance: {moving_var:.4f}")
-
-    # Now compare to your current synthetic data
-    x_sample, _ = next(iter(input_generator))
-    print(f"\nYour Synthetic Data:")
-    print(f" - Current Mean: {np.mean(x_sample):.4f}")
-    print(f" - Current Max: {np.max(x_sample):.4f}")
+    # 3. COMPARE TO PRE-TRAINED EXPECTATIONS
+    # We need to see if the BN layers expect [0, 1] or Z-score
+    # Use any layer name from your model.summary() that contains 'bn'
+    try:
+        # Try a common SynthSeg BN layer name
+        bn_layer = unet_model.get_layer('unet_bn_down_2')
+        weights = bn_layer.get_weights()
+        # Index 2 is moving_mean, Index 3 is moving_variance
+        print(f"Model Expects Mean: {np.mean(weights[2]):.4f}")
+    except:
+        print("Could not find BN layer; check model.summary() for layer names.")
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)

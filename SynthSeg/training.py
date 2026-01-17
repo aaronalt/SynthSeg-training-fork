@@ -356,7 +356,6 @@ def training(labels_dir,
 
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
-    # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
     for layer in unet_model.layers:
         if 'unet' in layer.name and 'likelihood' not in layer.name:

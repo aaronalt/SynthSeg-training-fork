@@ -321,28 +321,8 @@ def training(labels_dir,
                                  batch_norm=-1,
                                  name='unet')
 
-    # input generator
-    input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
 
-    # pre-training with weighted L2, input is fit to the softmax rather than the probabilities
     '''
-    if wl2_epochs > 0:
-        wl2_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
-        wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
-        train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir, 'wl2', checkpoint)
-        checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
-    
-    # 4. Phase 1: Frozen Warm-up (Weighted L2)
-    if wl2_epochs > 0:
-        wl2_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
-        wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
-        # Use a standard learning rate (e.g., 1e-4) to train the new head
-        train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir, 'wl2', checkpoint)
-        # Update checkpoint path for the next phase
-        checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
-    '''
-    unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
-
     def dynamic_normalized_generator(gen):
         for batch in gen:
             # batch[0][0] is the 3D MRI volume [Batch, D, H, W, 1]
@@ -361,13 +341,20 @@ def training(labels_dir,
 
             yield batch
 
-    input_generator = dynamic_normalized_generator(input_generator)
+    # input_generator = dynamic_normalized_generator(input_generator)
     # val_gen = dynamic_normalized_generator(input_generator)
 
     discovery_cfg = ClassDiscoveryCallback(
         validation_generator=input_generator,
         expected_num_classes=n_segmentation_labels
     )
+    '''
+
+
+    # input generator
+    input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
+
+    unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
     # --- PHASE 1: Frozen Warm-up with Cross-Entropy ---
     # 1. Freeze the base UNet (crucial for transfer learning)
@@ -377,14 +364,19 @@ def training(labels_dir,
         if isinstance(layer, tf.keras.layers.BatchNormalization):
             layer.training = False
             layer.trainable = False
-    if wl2_epochs > 0:
-        # 2. Create the warm-up model
-        ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
-        # 3. Compile with Categorical Crossentropy instead of 'wl2'
-        # 4. Train the frozen model
-        train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,
-                    model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
-        checkpoint = os.path.join(model_dir, 'ce_warmup_%03d.h5' % wl2_epochs)
+
+    # cross entropy model
+    '''
+    ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
+    train_model(ce_model, input_generator, lr, wl2_epochs, steps_per_epoch,
+                model_dir, 'ce_warmup', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
+    checkpoint = os.path.join(model_dir, 'ce_warmup_%03d.h5' % wl2_epochs)
+    '''
+    # pre-training with weighted L2, input is fit to the softmax rather than the probabilities
+    wl2_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
+    wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
+    train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir, 'wl2', checkpoint)
+    checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
     unet_model.trainable = True
@@ -393,7 +385,6 @@ def training(labels_dir,
             layer.training = True
             layer.trainable = True
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')
-    # IMPORTANT: Use a MUCH smaller learning rate for fine-tuning (e.g., 1/10th or 1/100th of lr)
     fine_tune_lr = lr / 10
     train_model(dice_model, input_generator, fine_tune_lr, dice_epochs, steps_per_epoch,
                 model_dir, 'dice', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])

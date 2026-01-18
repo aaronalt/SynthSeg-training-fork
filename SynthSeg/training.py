@@ -376,7 +376,7 @@ def training(labels_dir,
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')
     fine_tune_lr = lr / 10
     train_model(dice_model, input_generator, fine_tune_lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=True)
+                model_dir, 'dice', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
     checkpoint = os.path.join(model_dir, 'dice_%03d.h5' % dice_epochs)
 
 

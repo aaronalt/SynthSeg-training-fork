@@ -48,10 +48,16 @@ class InferenceBatchNorm(tf.keras.Model):
     def __init__(self, model):
         super().__init__()
         self.model = model
+        # CRITICAL: Build the wrapper so it has proper inputs/outputs
+        self._set_inputs(model.inputs)
 
     def call(self, inputs, training=None):
         # CRITICAL: Always pass training=False to keep BatchNorm frozen
         return self.model(inputs, training=False)
+
+    @property
+    def layers(self):
+        return self.model.layers
 
 
 class ClassDiscoveryCallback(Callback):
@@ -341,8 +347,8 @@ def training(labels_dir,
         expected_num_classes=n_segmentation_labels
     )
 
-    unet_model = InferenceBatchNorm(unet_model)
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
+    # unet_model = InferenceBatchNorm(unet_model)
 
     '''
     for layer in unet_model.layers:
@@ -366,7 +372,7 @@ def training(labels_dir,
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
     for layer in unet_model.layers:
         layer.trainable = True
-    unet_model = InferenceBatchNorm(unet_model.model)
+    # unet_model = InferenceBatchNorm(unet_model.model)
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')
     fine_tune_lr = lr / 10
     train_model(dice_model, input_generator, fine_tune_lr, dice_epochs, steps_per_epoch,

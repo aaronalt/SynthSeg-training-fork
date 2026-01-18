@@ -334,12 +334,13 @@ def training(labels_dir,
                                  batch_norm=-1,
                                  name='unet')
 
+
+    input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
+
     discovery_cfg = ClassDiscoveryCallback(
         validation_generator=input_generator,
         expected_num_classes=n_segmentation_labels
     )
-
-    input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
 
     unet_model = InferenceBatchNorm(unet_model)
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)

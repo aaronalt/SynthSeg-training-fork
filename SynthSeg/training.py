@@ -393,13 +393,14 @@ def train_model(model,
     save_file_name = os.path.join(model_dir, '%s_{epoch:03d}.h5' % metric_type)
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1)]
     callbacks.extend([discovery_cfg])
+    callbacks.append(KC.CSVLogger(os.path.join(log_dir, 'training.log')))
 
     if extra_callbacks:
         callbacks.extend(extra_callbacks)
 
     # TensorBoard callback
     if metric_type == 'dice':
-        callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False, update_freq='epoch'))
+        callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch'))
 
     compile_model = True
     init_epoch = 0

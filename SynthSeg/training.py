@@ -28,7 +28,7 @@ import keras.callbacks as KC
 from keras.optimizers import Adam
 from inspect import getmembers, isclass
 from tensorflow.keras.callbacks import Callback
-from tensorflow.keras import layers
+from tensorflow.keras import layers as keras_layers
 from keras.utils import Sequence
 
 # project imports
@@ -40,6 +40,19 @@ from ext.lab2im import utils, layers
 from ext.neuron import layers as nrn_layers
 from ext.neuron import models as nrn_models
 import threading
+
+
+class InferenceBatchNorm(tf.keras.Model):
+    """Wrapper that forces BatchNorm to run in inference mode"""
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def call(self, inputs, training=None):
+        # CRITICAL: Always pass training=False to keep BatchNorm frozen
+        return self.model(inputs, training=False)
+
 
 class ClassDiscoveryCallback(Callback):
     def __init__(self, validation_generator, expected_num_classes):
@@ -321,47 +334,18 @@ def training(labels_dir,
                                  batch_norm=-1,
                                  name='unet')
 
-
-    '''
-    def dynamic_normalized_generator(gen):
-        for batch in gen:
-            # batch[0][0] is the 3D MRI volume [Batch, D, H, W, 1]
-            image = batch[0][0]
-
-            # Calculate stats for the CURRENT volume
-            batch_mean = np.mean(image)
-            batch_std = np.std(image)
-
-            # Apply Z-score dynamically
-            # We add 1e-5 to avoid division by zero if the image is blank
-            normalized_image = (image - batch_mean) / (batch_std + 1e-5)
-
-            # Update the batch with the normalized data
-            batch[0][0] = normalized_image
-
-            yield batch
-
-    # input_generator = dynamic_normalized_generator(input_generator)
-    # val_gen = dynamic_normalized_generator(input_generator)
-
     discovery_cfg = ClassDiscoveryCallback(
         validation_generator=input_generator,
         expected_num_classes=n_segmentation_labels
     )
-    '''
 
-
-    # input generator
     input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
 
+    unet_model = InferenceBatchNorm(unet_model)
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
-    # 1. Freeze the base UNet (crucial for transfer learning)
     for layer in unet_model.layers:
         if 'unet' in layer.name and 'likelihood' not in layer.name:
-            layer.trainable = False
-        if isinstance(layer, tf.keras.layers.BatchNormalization):
-            layer.training = False
             layer.trainable = False
 
     # cross entropy model
@@ -374,19 +358,18 @@ def training(labels_dir,
     # pre-training with weighted L2, input is fit to the softmax rather than the probabilities
     wl2_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
     wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
-    train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir, 'wl2', checkpoint)
+    train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir, 'wl2', checkpoint, extra_callbacks=[discovery_cfg])
     checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
 
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
-    unet_model.trainable = True
     for layer in unet_model.layers:
-        if isinstance(layer, tf.keras.layers.BatchNormalization):
-            layer.training = True
-            layer.trainable = True
+        layer.trainable = True
+    unet_model = InferenceBatchNorm(unet_model.model)
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')
     fine_tune_lr = lr / 10
     train_model(dice_model, input_generator, fine_tune_lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=True, extra_callbacks=[discovery_cfg])
+                model_dir, 'dice', checkpoint, reinitialise_momentum=True)
+    checkpoint = os.path.join(model_dir, 'dice_%03d.h5' % dice_epochs)
 
 
 def train_model(model,
@@ -408,6 +391,7 @@ def train_model(model,
     # model saving callback
     save_file_name = os.path.join(model_dir, '%s_{epoch:03d}.h5' % metric_type)
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1)]
+    callbacks.extend([discovery_cfg])
 
     if extra_callbacks:
         callbacks.extend(extra_callbacks)
@@ -439,6 +423,4 @@ def train_model(model,
                         epochs=n_epochs,
                         steps_per_epoch=n_steps,
                         callbacks=callbacks,
-                        initial_epoch=init_epoch,
-                        workers=1,
-                        use_multiprocessing=False)
+                        initial_epoch=init_epoch)

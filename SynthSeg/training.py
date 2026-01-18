@@ -334,7 +334,6 @@ def training(labels_dir,
                                  batch_norm=-1,
                                  name='unet')
 
-
     input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
 
     discovery_cfg = ClassDiscoveryCallback(

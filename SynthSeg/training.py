@@ -344,10 +344,11 @@ def training(labels_dir,
     unet_model = InferenceBatchNorm(unet_model)
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
+    '''
     for layer in unet_model.layers:
         if 'unet' in layer.name and 'likelihood' not in layer.name:
             layer.trainable = False
-
+    '''
     # cross entropy model
     '''
     ce_model = models.Model(unet_model.inputs, [unet_model.get_layer('unet_likelihood').output])
@@ -356,11 +357,12 @@ def training(labels_dir,
     checkpoint = os.path.join(model_dir, 'ce_warmup_%03d.h5' % wl2_epochs)
     '''
     # pre-training with weighted L2, input is fit to the softmax rather than the probabilities
+    '''
     wl2_model = models.Model(unet_model.inputs, unet_model.outputs)
     wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
     train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir, 'wl2', checkpoint, extra_callbacks=[discovery_cfg])
     checkpoint = os.path.join(model_dir, 'wl2_%03d.h5' % wl2_epochs)
-
+    '''
     # 5. Phase 2: Unfrozen Fine-tuning (Dice)
     for layer in unet_model.layers:
         layer.trainable = True

@@ -22,7 +22,6 @@ import tensorflow as tf
 import keras.layers as KL
 import keras.backend as K
 from keras.models import Model
-import h5py
 
 # project imports
 from SynthSeg import evaluate
@@ -383,8 +382,7 @@ def preprocess(path_image, n_levels, target_res, crop=None, min_pad=None, path_r
 
     # read image and corresponding info
     im, _, aff, n_dims, n_channels, h, im_res = utils.get_volume_info(path_image, True)
-    print(f"DEBUG preprocess: im.shape = {im.shape}")
-    print(f"DEBUG preprocess: n_dims = {n_dims}, n_channels = {n_channels}")
+
     # resample image if necessary
     if target_res is not None:
         target_res = np.squeeze(utils.reformat_to_n_channels_array(target_res, n_dims))
@@ -422,11 +420,10 @@ def preprocess(path_image, n_levels, target_res, crop=None, min_pad=None, path_r
         min_pad = [utils.find_closest_number_divisible_by_m(s, 2 ** n_levels, 'higher') for s in min_pad]
         pad_shape = np.maximum(pad_shape, min_pad)
     im, pad_idx = edit_volumes.pad_volume(im, padding_shape=pad_shape, return_pad_idx=True)
-    print(f"DEBUG: After padding - im.shape: {im.shape}, im.ndim: {im.ndim}")
+
     # add batch and channel axes
     im = utils.add_axis(im) if n_channels > 1 else utils.add_axis(im, axis=[0, -1])
-    #im = im.astype('float32')
-    #im = im[np.newaxis, ..., np.newaxis]  # (H,W,D) -> (1,H,W,D,1)
+
     return im, aff, h, im_res, shape, pad_idx, crop_idx
 
 
@@ -467,33 +464,7 @@ def build_model(path_model,
                           feat_mult=feat_multiplier,
                           activation=activation,
                           batch_norm=-1)
-    #  net.load_weights(path_model, by_name=True)
-    print("Bypassing Keras load_weights with robust manual loader...")
-    with h5py.File(path_model, 'r') as f:
-        weight_group = f['model_weights']
-        for layer in net.layers:
-            if layer.name in weight_group:
-                g = weight_group[layer.name]
-            
-                # Keras H5 files often nest: layer_name -> layer_name -> weights
-                # If the layer name is a sub-group, go one level deeper
-                target_group = g[layer.name] if layer.name in g else g
-            
-                # Get all dataset names and sort them (alphabetical: 'bias:0' usually after 'kernel:0')
-                dset_names = sorted(target_group.keys(), reverse=True)
-                weights_to_load = [np.array(target_group[name]) for name in dset_names]
-            
-                if weights_to_load:
-                    print(f"Loading {layer.name}: {[w.shape for w in weights_to_load]}")
-                    try:
-                        layer.set_weights(weights_to_load)
-                    except ValueError as e:
-                        print(f"CRITICAL SHAPE MISMATCH in {layer.name}: {e}")
-                    # This will tell us EXACTLY what the model expects vs what is in the file
-            elif 'input' not in layer.name:
-                print(f"Layer {layer.name} not found in model file. Skipping.")
-
-    print("Manual weight load attempt complete.")
+    net.load_weights(path_model, by_name=True)
 
     # smooth posteriors if specified
     if sigma_smoothing > 0:

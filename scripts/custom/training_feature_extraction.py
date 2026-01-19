@@ -294,21 +294,24 @@ def training(labels_dir,
                                  name='unet')
 
     input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
-
+    print("Loading checkpoint...")
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
     unet_model.trainable = False
-
+    print("Creating dice model...")
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice', training=False)  # check if normalization needed
     dice_model.summary()
     checkpoint = os.path.join(model_dir, 'dice_%03d.h5' % dice_epochs)
+    print("Starting training 1st phase...")
     train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch,
                 model_dir, 'dice', checkpoint, reinitialise_momentum=True)
 
     # Unfreeze base model and fine-tune
+    print("Unfreezing layers...")
     unet_model.trainable = True
     dice_model.summary()
     fine_tune_lr = lr / 10
     fine_tune_epochs = dice_epochs / 2
+    print("Starting training fine tune phase...")
     train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir, 'dice', checkpoint, reinitialise_momentum=True)
 
 

@@ -309,7 +309,6 @@ def training(labels_dir,
     dice_model.summary()
     fine_tune_lr = lr / 10
     fine_tune_epochs = dice_epochs / 2
-    checkpoint = os.path.join(model_dir, 'tl_model_%03d.h5' % dice_epochs)
     train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir, 'dice', checkpoint, reinitialise_momentum=True)
 
 

@@ -33,7 +33,7 @@ log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
 # Split into train/test
-train_path, test_path = create_train_test_split(
+train_path, val_path = create_train_test_split(
     base_dir=training_label_maps,
     subdirs=['t1w', 't2w-cor', 't2w-tra'],
     output_dir='/tmp/training_split',
@@ -60,9 +60,9 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-4
+lr = 1e-5
 wl2_epochs = 2
-dice_epochs = 5
+dice_epochs = 20
 steps_per_epoch = 500
 
 # Generation and segmentation labels
@@ -130,4 +130,5 @@ training(path_training_label_maps,
          wl2_epochs=wl2_epochs,
          dice_epochs=dice_epochs,
          steps_per_epoch=steps_per_epoch,
-         checkpoint=path_checkpoint)
+         checkpoint=path_checkpoint,
+         validation_data=val_path)

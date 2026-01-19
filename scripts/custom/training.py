@@ -68,9 +68,13 @@ dice_epochs = 20
 steps_per_epoch = 500
 
 # Generation and segmentation labels
-path_generation_labels = np.array([0, 14, 16, 24, 2, 3, 4, 5, 8, 10, 11, 12, 13, 17, 18, 26, 28, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 138, 139])
+path_generation_labels = np.array([0, 14, 16, 24,
+                                   2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
+                                   41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 n_neutral_labels = 4
-path_segmentation_labels = np.array([0, 0, 0, 0, 2, 3, 4, 5, 8, 10, 11, 12, 13, 17, 18, 26, 28, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 138, 139])
+path_segmentation_labels = np.array([0, 0, 0, 0,
+                                     2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
+                                     41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 
 # Shape and resolution
 target_res = 0.35
@@ -79,7 +83,9 @@ n_channels = 1
 
 # GMM sampling
 prior_distributions = 'uniform'
-path_generation_classes = np.array([0, 3, 10, 3, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 14])
+path_generation_classes = np.array([0, 1, 2, 1,
+                                    3, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                                    3, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
 
 # Spatial deformation parameters
 flipping = False

@@ -9,9 +9,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import datetime
 import tensorflow as tf
 import numpy as np
-from SynthSeg.training import training
+# from SynthSeg.training import training
 from create_train_test_split import create_train_test_split
 from standardize_labels import standardize_training_labels
+from training_feature_extraction import training
 
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
@@ -44,6 +45,7 @@ train_path, val_path = create_train_test_split(
 )
 
 standardize_training_labels(train_path, train_path)
+standardize_training_labels(val_path, val_path)
 path_training_label_maps = train_path
 
 # Pre-trained model
@@ -131,4 +133,4 @@ training(path_training_label_maps,
          dice_epochs=dice_epochs,
          steps_per_epoch=steps_per_epoch,
          checkpoint=path_checkpoint,
-         validation_data=val_path)
+         val_path=val_path)

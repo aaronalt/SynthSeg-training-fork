@@ -24,7 +24,7 @@ from keras.models import Model
 from ext.lab2im import layers
 
 
-def metrics_model(input_model, label_list, metrics='dice', training=True):
+def metrics_model(input_model, label_list, metrics='dice'):
 
     # get prediction
     last_tensor = input_model.outputs[0]
@@ -55,10 +55,7 @@ def metrics_model(input_model, label_list, metrics='dice', training=True):
         raise Exception('metrics should either be "dice or "wl2, got {}'.format(metrics))
 
     # create the model and return
-    if not training:
-        model = Model(inputs=input_model.inputs, outputs=last_tensor, training=False)
-    else:
-        model = Model(inputs=input_model.inputs, outputs=last_tensor)
+    model = Model(inputs=input_model.inputs, outputs=last_tensor)
     return model
 
 

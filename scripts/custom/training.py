@@ -37,7 +37,7 @@ os.makedirs(log_dir, exist_ok=True)
 train_path, val_path = create_train_test_split(
     base_dir=training_label_maps,
     subdirs=['t1w', 't2w-cor', 't2w-tra'],
-    output_dir='/tmp/training_split',
+    output_dir='/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/tmp/training_split',
     method='copy',
     test_ratio=0.2,
     seed=42,
@@ -49,7 +49,7 @@ standardize_training_labels(val_path, val_path)
 path_training_label_maps = train_path
 
 # Pre-trained model
-path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/claustrum_model_weights/outputs/mauri_unet_weights.h5' 
+path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
 
 batchsize = 1
 
@@ -63,16 +63,16 @@ feat_multiplier = 2
 
 # Training parameters
 lr = 1e-5
-wl2_epochs = 2
-dice_epochs = 20
-steps_per_epoch = 500
+wl2_epochs = 0
+dice_epochs = 100
+steps_per_epoch = 1000
 
 # Generation and segmentation labels
-path_generation_labels = np.array([0, 14, 16, 24,
+path_generation_labels = np.array([0, 14, 15, 16, 24,
                                    2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
                                    41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
-n_neutral_labels = 4
-path_segmentation_labels = np.array([0, 0, 0, 0,
+n_neutral_labels = 5
+path_segmentation_labels = np.array([0, 14, 15, 16, 24,
                                      2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
                                      41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 
@@ -83,9 +83,9 @@ n_channels = 1
 
 # GMM sampling
 prior_distributions = 'uniform'
-path_generation_classes = np.array([0, 1, 2, 1,
-                                    3, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-                                    3, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+path_generation_classes = np.array([0, 1, 2, 3, 4,
+                                    5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+                                    5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
 flipping = False

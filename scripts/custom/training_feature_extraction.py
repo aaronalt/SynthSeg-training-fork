@@ -327,27 +327,26 @@ def training(labels_dir,
 
     val_generator = utils.build_training_generator(val_brain_generator.model_inputs_generator, batchsize)
     input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
-    print("Loading checkpoint...")
+
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
     unet_model.trainable = False
-    print("Creating dice model...")
+
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')  # check if normalization needed
     dice_model.summary()
-    print("Starting training 1st phase...")
+
+    phase = 'pretrain'
     train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator)
+                model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator, phase=phase)
 
     # Unfreeze base model and fine-tune
-    print("Unfreezing layers...")
+    phase = 'finetune'
     unet_model.trainable = True
     for layer in unet_model.layers:
         if isinstance(layer, tf.keras.layers.BatchNormalization):
             layer.trainable = False
-    dice_model.summary()
     fine_tune_lr = lr / 10
     fine_tune_epochs = int(dice_epochs / 2)
-    print("Starting training fine tune phase...")
-    train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator)
+    train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator, phase=phase)
 
 
 
@@ -361,7 +360,8 @@ def train_model(model,
                 path_checkpoint=None,
                 reinitialise_momentum=False,
                 extra_callbacks=None,
-		validation_data=None):
+		        validation_data=None,
+                phase=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -369,7 +369,7 @@ def train_model(model,
     utils.mkdir(log_dir)
 
     # model saving callback
-    save_file_name = os.path.join(model_dir, '%s_{epoch:03d}.h5' % metric_type)
+    save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_type, phase, n_epochs))
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
 
     if extra_callbacks:

@@ -334,9 +334,16 @@ def training(labels_dir,
     dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')  # check if normalization needed
     dice_model.summary()
 
+    reinitialize_momentum = True
+    resume = True
+    if resume:
+        checkpoint = os.path.join(model_dir, 'MODEL PATH')
+        reinitialize_momentum = False
+        dice_epochs = 48
+
     phase = 'pretrain'
     train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator, phase=phase)
+                model_dir, 'dice', checkpoint, reinitialise_momentum=reinitialize_momentum, validation_data=val_generator, phase=phase)
 
     # Unfreeze base model and fine-tune
     phase = 'finetune'
@@ -347,7 +354,6 @@ def training(labels_dir,
     fine_tune_lr = lr / 10
     fine_tune_epochs = int(dice_epochs / 2)
     train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator, phase=phase)
-
 
 
 def train_model(model,

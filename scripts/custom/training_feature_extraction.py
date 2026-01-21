@@ -335,15 +335,15 @@ def training(labels_dir,
     dice_model.summary()
 
     reinitialize_momentum = True
-    resume = True
-    if resume:
-        checkpoint = os.path.join(model_dir, 'MODEL PATH')
+    resume_epoch = True
+    if resume_epoch:
+        checkpoint = os.path.join('/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260120_103539/dice_pretrain_052_100.h5')
         reinitialize_momentum = False
-        dice_epochs = 48
+        resume_epoch = 48
 
     phase = 'pretrain'
     train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=reinitialize_momentum, validation_data=val_generator, phase=phase)
+                model_dir, 'dice', checkpoint, reinitialise_momentum=reinitialize_momentum, validation_data=val_generator, phase=phase, resume_epoch=resume_epoch)
 
     # Unfreeze base model and fine-tune
     phase = 'finetune'
@@ -367,7 +367,8 @@ def train_model(model,
                 reinitialise_momentum=False,
                 extra_callbacks=None,
 		        validation_data=None,
-                phase=None):
+                phase=None,
+		resume_epoch=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -388,8 +389,10 @@ def train_model(model,
     compile_model = True
     init_epoch = 0
     if path_checkpoint is not None:
-        if metric_type in path_checkpoint:
+        if (metric_type in path_checkpoint) and (not resume_epoch):
             init_epoch = int(os.path.basename(path_checkpoint).split(metric_type)[1][1:-3])
+        if resume_epoch:
+            init_epoch =  resume_epoch
         if (not reinitialise_momentum) & (metric_type in path_checkpoint):
             custom_l2i = {key: value for (key, value) in getmembers(layers, isclass) if key != 'Layer'}
             custom_nrn = {key: value for (key, value) in getmembers(nrn_layers, isclass) if key != 'Layer'}
@@ -400,8 +403,10 @@ def train_model(model,
             model.load_weights(path_checkpoint, by_name=True)
 
     # compile
-    if compile_model:
-        model.compile(optimizer=tf.keras.optimizers.Adam(lr=learning_rate), loss=metrics.IdentityLoss().loss)
+    if compile_model or metric_type == 'dice' or not hasattr(model, 'optimizer'):
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(lr=learning_rate), 
+            loss=metrics.IdentityLoss().loss)
 
     # fit
     model.fit(generator,

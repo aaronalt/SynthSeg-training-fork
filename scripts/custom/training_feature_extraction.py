@@ -335,25 +335,41 @@ def training(labels_dir,
     dice_model.summary()
 
     reinitialize_momentum = True
-    resume_epoch = True
+
+    resume_epoch = False
+    skip_pretrain = True
+
     if resume_epoch:
         checkpoint = os.path.join('/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260120_103539/dice_pretrain_052_100.h5')
         reinitialize_momentum = False
         resume_epoch = 48
 
-    phase = 'pretrain'
-    train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch,
-                model_dir, 'dice', checkpoint, reinitialise_momentum=reinitialize_momentum, validation_data=val_generator, phase=phase, resume_epoch=resume_epoch)
+    if not skip_pretrain:
+        phase = 'pretrain'
+        train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch, model_dir,
+                    'dice',
+                    checkpoint,
+                    reinitialise_momentum=reinitialize_momentum,
+                    validation_data=val_generator,
+                    phase=phase,
+                    resume_epoch=resume_epoch)
 
     # Unfreeze base model and fine-tune
     phase = 'finetune'
+    if skip_pretrain:
+        checkpoint = os.path.join('best_pretrain_model')
     unet_model.trainable = True
     for layer in unet_model.layers:
         if isinstance(layer, tf.keras.layers.BatchNormalization):
             layer.trainable = False
     fine_tune_lr = lr / 10
     fine_tune_epochs = int(dice_epochs / 2)
-    train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir, 'dice', checkpoint, reinitialise_momentum=True, validation_data=val_generator, phase=phase)
+    train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir,
+                'dice',
+                checkpoint,
+                reinitialise_momentum=True,
+                validation_data=val_generator,
+                phase=phase)
 
 
 def train_model(model,

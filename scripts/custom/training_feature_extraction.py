@@ -352,12 +352,13 @@ def training(labels_dir,
                     reinitialise_momentum=reinitialize_momentum,
                     validation_data=val_generator,
                     phase=phase,
-                    resume_epoch=resume_epoch)
+                    resume_epoch=resume_epoch,
+                    skip_pretrain=False)
 
     # Unfreeze base model and fine-tune
     phase = 'finetune'
     if skip_pretrain:
-        checkpoint = os.path.join('best_pretrain_model')
+        checkpoint = os.path.join('/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5')
     unet_model.trainable = True
     for layer in unet_model.layers:
         if isinstance(layer, tf.keras.layers.BatchNormalization):
@@ -369,7 +370,8 @@ def training(labels_dir,
                 checkpoint,
                 reinitialise_momentum=True,
                 validation_data=val_generator,
-                phase=phase)
+                phase=phase,
+		skip_pretrain=skip_pretrain)
 
 
 def train_model(model,
@@ -384,7 +386,8 @@ def train_model(model,
                 extra_callbacks=None,
 		        validation_data=None,
                 phase=None,
-		resume_epoch=None):
+		resume_epoch=None,
+		skip_pretrain=False):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -405,7 +408,7 @@ def train_model(model,
     compile_model = True
     init_epoch = 0
     if path_checkpoint is not None:
-        if (metric_type in path_checkpoint) and (not resume_epoch):
+        if (metric_type in path_checkpoint) and (not resume_epoch) and (not skip_pretrain):
             init_epoch = int(os.path.basename(path_checkpoint).split(metric_type)[1][1:-3])
         if resume_epoch:
             init_epoch =  resume_epoch

@@ -407,8 +407,6 @@ def train_model(model,
     compile_model = True
     init_epoch = 0
     if path_checkpoint is not None:
-        if (metric_type in path_checkpoint) and (not resume_epoch):
-            init_epoch = int(os.path.basename(path_checkpoint).split(metric_type)[1][1:-3])
         if resume_epoch:
             init_epoch =  resume_epoch
         if (not reinitialise_momentum) & (metric_type in path_checkpoint):

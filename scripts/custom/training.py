@@ -37,7 +37,7 @@ os.makedirs(log_dir, exist_ok=True)
 t1w_train_path, t1w_val_path = create_train_test_split(
     base_dir=training_label_maps,
     subdirs=['t1w'],
-    output_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/training_split_t1w',
+    output_dir='/tmp/training_split_t1w',
     method='copy',
     test_ratio=0.3,
     seed=42,
@@ -47,7 +47,7 @@ t1w_train_path, t1w_val_path = create_train_test_split(
 t2w_train_path, t2w_val_path = create_train_test_split(
     base_dir=training_label_maps,
     subdirs=['t2w-cor', 't2w-tra'],
-    output_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/training_split_t2w',
+    output_dir='/tmp/training_split_t2w',
     method='copy',
     test_ratio=0.3,
     seed=42,
@@ -56,14 +56,14 @@ t2w_train_path, t2w_val_path = create_train_test_split(
 
 extract_test_from_validation(
     val_dir=t1w_val_path,
-    output_test_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/test_t1w',
+    output_test_dir='/tmp/test_t1w',
     test_ratio=0.5,
     seed=42
 )
 
 extract_test_from_validation(
     val_dir=t2w_val_path,
-    output_test_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/test_t2w',
+    output_test_dir='/tmp/test_t2w',
     test_ratio=0.5,
     seed=42
 )

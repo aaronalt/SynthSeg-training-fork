@@ -77,9 +77,8 @@ path_training_label_maps_t2w = t2w_train_path
 
 
 # Pre-trained model
-path_checkpoint = '/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'
-# '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
-
+path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
+# #'/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'
 batchsize = 1
 
 # Architecture parameters

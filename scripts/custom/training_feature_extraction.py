@@ -357,21 +357,22 @@ def training(labels_dir,
                     resume_epoch=resume_epoch)
 
     # Unfreeze base model and fine-tune
-    phase = 'finetune'
-    if skip_pretrain:
-        checkpoint = os.path.join('best_pretrain_model')
-    unet_model.trainable = True
-    for layer in unet_model.layers:
-        if isinstance(layer, tf.keras.layers.BatchNormalization):
-            layer.trainable = False
-    fine_tune_lr = lr / 10
-    fine_tune_epochs = int(dice_epochs / 2)
-    train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir,
-                'dice',
-                checkpoint,
-                reinitialise_momentum=True,
-                validation_data=val_generator,
-                phase=phase)
+    if finetune:
+        phase = 'finetune'
+        if skip_pretrain:
+            checkpoint = os.path.join('best_pretrain_model')
+        unet_model.trainable = True
+        for layer in unet_model.layers:
+            if isinstance(layer, tf.keras.layers.BatchNormalization):
+                layer.trainable = False
+        fine_tune_lr = lr / 10
+        fine_tune_epochs = int(dice_epochs / 2)
+        train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir,
+                    'dice',
+                    checkpoint,
+                    reinitialise_momentum=True,
+                    validation_data=val_generator,
+                    phase=phase)
 
 
 def train_model(model,

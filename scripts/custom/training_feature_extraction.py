@@ -339,7 +339,6 @@ def training(labels_dir,
     reinitialize_momentum = True
 
     resume_epoch = False
-    skip_pretrain = True
 
     if resume_epoch:
         checkpoint = os.path.join('/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260120_103539/dice_pretrain_052_100.h5')

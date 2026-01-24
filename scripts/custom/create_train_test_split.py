@@ -304,6 +304,27 @@ def create_train_test_split(base_dir='/training_labels',
     return train_path, test_path
 
 
+def extract_test_from_validation(val_dir, output_test_dir, test_ratio=0.5, seed=42):
+    """Copy a portion of validation set to test directory (doesn't modify original val)"""
+
+    random.seed(seed)
+    val_dir = Path(val_dir)
+    output_test_dir = Path(output_test_dir)
+    output_test_dir.mkdir(parents=True, exist_ok=True)
+
+    all_files = sorted(list(val_dir.glob('*nii.gz')))
+    random.shuffle(all_files)
+
+    test_count = int(len(all_files) * test_ratio)
+    test_files = all_files[:test_count]
+
+    print(f"Copying {len(test_files)} files to test set...")
+    for f in test_files:
+        shutil.copy(f, output_test_dir / f.name)
+
+    print(f"✓ Test set saved to {output_test_dir}")
+
+
 def main():
     """Command-line interface"""
     parser = argparse.ArgumentParser(

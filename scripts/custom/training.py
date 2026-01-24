@@ -10,7 +10,7 @@ import datetime
 import tensorflow as tf
 import numpy as np
 # from SynthSeg.training import training
-from create_train_test_split import create_train_test_split
+from create_train_test_split import create_train_test_split, extract_test_from_validation
 from standardize_labels import standardize_training_labels
 from training_feature_extraction import training
 
@@ -34,22 +34,51 @@ log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
 # Split into train/test
-train_path, val_path = create_train_test_split(
+t1w_train_path, t1w_val_path = create_train_test_split(
     base_dir=training_label_maps,
-    subdirs=['t1w', 't2w-cor', 't2w-tra'],
-    output_dir='/tmp/training_split',
+    subdirs=['t1w'],
+    output_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/training_split_t1w',
     method='copy',
-    test_ratio=0.2,
+    test_ratio=0.3,
     seed=42,
     verbose=False
 )
 
-standardize_training_labels(train_path, train_path)
-standardize_training_labels(val_path, val_path)
-path_training_label_maps = train_path
+t2w_train_path, t2w_val_path = create_train_test_split(
+    base_dir=training_label_maps,
+    subdirs=['t2w-cor', 't2w-tra'],
+    output_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/training_split_t2w',
+    method='copy',
+    test_ratio=0.3,
+    seed=42,
+    verbose=False
+)
+
+extract_test_from_validation(
+    val_dir=t1w_val_path,
+    output_test_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/test_t1w',
+    test_ratio=0.5,
+    seed=42
+)
+
+extract_test_from_validation(
+    val_dir=t2w_val_path,
+    output_test_dir='/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels/test_t2w',
+    test_ratio=0.5,
+    seed=42
+)
+
+standardize_training_labels(t1w_train_path, t1w_train_path)
+standardize_training_labels(t1w_val_path, t1w_val_path)
+path_training_label_maps_t1w = t1w_train_path
+standardize_training_labels(t2w_train_path, t2w_train_path)
+standardize_training_labels(t2w_val_path, t2w_val_path)
+path_training_label_maps_t2w = t2w_train_path
+
 
 # Pre-trained model
-path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
+path_checkpoint = '/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'
+# '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
 
 batchsize = 1
 
@@ -64,7 +93,7 @@ feat_multiplier = 2
 # Training parameters
 lr = 1e-5
 wl2_epochs = 0
-dice_epochs = 70
+dice_epochs = 100
 steps_per_epoch = 1000
 
 # Generation and segmentation labels
@@ -108,8 +137,9 @@ print(f"Epochs: {dice_epochs}")
 print(f"Steps per epoch: {steps_per_epoch}")
 print("\nStarting training...\n")
 
-# Start training
-training(path_training_label_maps,
+# Start training - pretrain
+skip_pretrain = False
+training(path_training_label_maps_t2w,
          path_model_dir,
          generation_labels=path_generation_labels,
          segmentation_labels=path_segmentation_labels,
@@ -139,4 +169,6 @@ training(path_training_label_maps,
          dice_epochs=dice_epochs,
          steps_per_epoch=steps_per_epoch,
          checkpoint=path_checkpoint,
-         val_path=val_path)
+         val_path=t1w_val_path,
+         skip_pretrain=skip_pretrain,
+         finetune=False)

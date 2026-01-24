@@ -128,15 +128,6 @@ bias_field_std = 0.2
 # Acquisition resolution parameters
 randomise_res = True
 
-print("\n=== Training Configuration ===")
-print(f"Training labels: {path_training_label_maps}")
-print(f"Output directory: {path_model_dir}")
-print(f"Batch size: {batchsize}")
-print(f"Output shape: {output_shape}")
-print(f"Epochs: {dice_epochs}")
-print(f"Steps per epoch: {steps_per_epoch}")
-print("\nStarting training...\n")
-
 # Start training - pretrain
 skip_pretrain = False
 training(path_training_label_maps_t2w,

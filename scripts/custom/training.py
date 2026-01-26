@@ -159,6 +159,6 @@ training(path_training_label_maps_t2w,
          dice_epochs=dice_epochs,
          steps_per_epoch=steps_per_epoch,
          checkpoint=path_checkpoint,
-         val_path=t1w_val_path,
+         val_path=t2w_val_path,
          skip_pretrain=skip_pretrain,
          finetune=False)

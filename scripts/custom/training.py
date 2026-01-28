@@ -3,17 +3,10 @@ SynthSeg training script for claustrum segmentation
 Optimized for NVIDIA RTX 2000 Ada with CUDA 12.x and TensorFlow 2.15
 """
 
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-import datetime
-import tensorflow as tf
-import numpy as np
-# from SynthSeg.training import training
-from create_train_test_split import create_train_test_split, extract_test_from_validation
-from standardize_labels import standardize_training_labels
-from training_feature_extraction import training
 
+import os
+import tensorflow as tf
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
 gpus = tf.config.list_physical_devices('GPU')
@@ -24,6 +17,14 @@ if gpus:
         print(f"Configured {len(gpus)} GPU(s) with memory growth enabled")
     except RuntimeError as e:
         print(f"GPU configuration error: {e}")
+
+import datetime
+import numpy as np
+import sys
+# from SynthSeg.training import training
+from create_train_test_split import create_train_test_split, extract_test_from_validation
+from standardize_labels import standardize_training_labels
+from training_feature_extraction import training
 
 # Paths
 training_label_maps = '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels'

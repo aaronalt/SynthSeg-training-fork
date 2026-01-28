@@ -104,27 +104,27 @@ all_train_paths = '/tmp/training_all_train'
 all_val_paths = '/tmp/training_all_val'
 os.makedirs(all_train_paths, exist_ok=True)
 os.makedirs(all_val_paths, exist_ok=True)
-for f in train_files_7t_t1 + train_files_7t_t2 + train_files_3t:
-    dest = os.path.join(all_train_paths, os.path.basename(str(f)))
-    if not os.path.exists(dest):
-        os.symlink(str(f), dest)
-for f in val_files_7t_t1 + val_files_7t_t2 + val_files_3t:
-    dest = os.path.join(all_val_paths, os.path.basename(str(f)))
-    if not os.path.exists(dest):
-        os.symlink(str(f), dest)
+for prefix, files in [('7t_t1w_', train_files_7t_t1), ('7t_t2w_', train_files_7t_t2), ('3t_', train_files_3t)]:
+    for f in files:
+        dest = os.path.join(all_train_paths, prefix + os.path.basename(str(f)))
+        if not os.path.exists(dest):
+            os.symlink(str(f), dest)
+for prefix, files in [('7t_t1w_', val_files_7t_t1), ('7t_t2w_', val_files_7t_t2), ('3t_', val_files_3t)]:
+    for f in files:
+        dest = os.path.join(all_val_paths, prefix + os.path.basename(str(f)))
+        if not os.path.exists(dest):
+            os.symlink(str(f), dest)
 print(all_train_paths)
 
 # Create a probability array
+all_train_files = sorted(os.listdir(all_train_paths))
 probs = []
-for p in all_train_paths:
-    if "3t" in str(p):
-        # Weight for 50% total
+for fname in all_train_files:
+    if fname.startswith('3t_'):
         probs.append(0.5 / len(train_files_3t))
-    elif "t1w" in str(p):
-        # Weight for 30% total
+    elif fname.startswith('7t_t1w_'):
         probs.append(0.3 / len(train_files_7t_t1))
-    elif "t2w" in str(p):
-        # Weight for 20% total
+    elif fname.startswith('7t_t2w_'):
         probs.append(0.2 / len(train_files_7t_t2))
 # Normalize to ensure they sum to 1.0
 subjects_prob = np.array(probs) / np.sum(probs)

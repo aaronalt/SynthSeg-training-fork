@@ -92,33 +92,38 @@ def create_directories(output_dir, method):
 
 
 def populate_directories(train_files, test_files, train_path, test_path, method):
-    """Populate train/test directories with files"""
-    
+    """Populate directories and prepend source modality to filenames"""
+
     print(f"\nPopulating directories using method: {method}")
-    
-    # Process train files
-    for file_info in train_files:
-        src = file_info['path']
-        dst = train_path / file_info['name']
-        
-        if method == 'symlink':
-            dst.symlink_to(src.resolve())
-        elif method == 'copy':
-            shutil.copy2(src, dst)
-    
-    print(f"✓ Processed {len(train_files)} train files")
-    
-    # Process test files
-    for file_info in test_files:
-        src = file_info['path']
-        dst = test_path / file_info['name']
-        
-        if method == 'symlink':
-            dst.symlink_to(src.resolve())
-        elif method == 'copy':
-            shutil.copy2(src, dst)
-    
-    print(f"✓ Processed {len(test_files)} test files")
+
+    # Define a mapping for readability (Optional)
+    # This helps turn 't2w-cor' into '7T_0.22mm_t2w-cor'
+    res_map = {
+        't1w': '7T_0.6mm',
+        't2w-cor': '7T_0.22mm',
+        't2w-tra': '7T_0.22mm',
+        '3t-t1w': '3T_1.0mm'
+    }
+
+    for folder_type, files, dest_dir in [('train', train_files, train_path),
+                                         ('test', test_files, test_path)]:
+        for file_info in files:
+            src = file_info['path']
+            source_tag = file_info['source']
+
+            # Get the resolution prefix from our map, or just use the source name
+            prefix = res_map.get(source_tag, source_tag)
+
+            # Create the new filename: prefix_original-name.nii.gz
+            new_name = f"{prefix}_{file_info['name']}"
+            dst = dest_dir / new_name
+
+            if method == 'symlink':
+                dst.symlink_to(src.resolve())
+            elif method == 'copy':
+                shutil.copy2(src, dst)
+
+    print(f"✓ Tagged and processed {len(train_files) + len(test_files)} total files")
 
 
 def save_split_info(output_dir, train_files, test_files, args):

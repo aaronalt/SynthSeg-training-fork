@@ -54,6 +54,16 @@ t2w_train_path, t2w_val_path = create_train_test_split(
     verbose=False
 )
 
+t3_train_path, t3_val_path = create_train_test_split(
+    base_dir='home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels',
+    subdirs=['t1w'],
+    output_dir='/tmp/training_split_3T',
+    method='copy',
+    test_ratio=0.3,
+    seed=42,
+    verbose=False
+)
+
 extract_test_from_validation(
     val_dir=t1w_val_path,
     output_test_dir='/tmp/test_t1w',
@@ -68,13 +78,42 @@ extract_test_from_validation(
     seed=42
 )
 
+extract_test_from_validation(
+    val_dir=t3_val_path,
+    output_test_dir='/tmp/test_3T',
+    test_ratio=0.5,
+    seed=42
+)
+
 standardize_training_labels(t1w_train_path, t1w_train_path)
 standardize_training_labels(t1w_val_path, t1w_val_path)
-path_training_label_maps_t1w = t1w_train_path
 standardize_training_labels(t2w_train_path, t2w_train_path)
 standardize_training_labels(t2w_val_path, t2w_val_path)
-path_training_label_maps_t2w = t2w_train_path
+standardize_training_labels(t3_train_path, t3_train_path)
+standardize_training_labels(t3_val_path, t3_val_path)
+train_files_3t = list(t3_train_path.glob('*.nii.gz'))
+train_files_7t_t1 = list(t1w_train_path.glob('*.nii.gz'))
+train_files_7t_t2 = list(t2w_train_path.glob('*.nii.gz'))
+all_train_paths = train_files_7t_t1 + train_files_7t_t2 + train_files_3t
+val_files_3t = list(t3_val_path.glob('*.nii.gz'))
+val_files_7t_t1 = list(t1w_val_path.glob('*.nii.gz'))
+val_files_7t_t2 = list(t2w_val_path.glob('*.nii.gz'))
+all_val_paths = val_files_7t_t1 + val_files_7t_t2 + val_files_3t
 
+# Create a probability array
+probs = []
+for p in all_label_paths:
+    if "3t" in str(p):
+        # Weight for 50% total
+        probs.append(0.5 / len(t3t_train_files))
+    elif "t1w" in str(p):
+        # Weight for 30% total
+        probs.append(0.3 / len(t1w_train_files))
+    elif "t2w" in str(p):
+        # Weight for 20% total
+        probs.append(0.2 / len(t2w_train_files))
+# Normalize to ensure they sum to 1.0
+subjects_prob = np.array(probs) / np.sum(probs)
 
 # Pre-trained model
 path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
@@ -92,7 +131,7 @@ feat_multiplier = 2
 # Training parameters
 lr = 1e-5
 wl2_epochs = 0
-dice_epochs = 100
+dice_epochs = 50
 steps_per_epoch = 1000
 
 # Generation and segmentation labels
@@ -116,20 +155,20 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
-flipping = False
-scaling_bounds = 0.1
-rotation_bounds = 5
-shearing_bounds = 0.005
+flipping = True
+scaling_bounds = 0.2
+rotation_bounds = 15
+shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 1.0
-bias_field_std = 0.2
+nonlin_std = 4.0
+bias_field_std = 0.7
 
 # Acquisition resolution parameters
 randomise_res = True
 
 # Start training - pretrain
 skip_pretrain = False
-training(path_training_label_maps_t2w,
+training(all_train_paths,
          path_model_dir,
          generation_labels=path_generation_labels,
          segmentation_labels=path_segmentation_labels,
@@ -159,6 +198,7 @@ training(path_training_label_maps_t2w,
          dice_epochs=dice_epochs,
          steps_per_epoch=steps_per_epoch,
          checkpoint=path_checkpoint,
-         val_path=t2w_val_path,
+         val_path=all_val_paths,
          skip_pretrain=skip_pretrain,
-         finetune=False)
+         finetune=False,
+         subjects_prob=subjects_prob)

@@ -56,7 +56,7 @@ t2w_train_path, t2w_val_path = create_train_test_split(
 )
 
 t3_train_path, t3_val_path = create_train_test_split(
-    base_dir='home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels',
+    base_dir='/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels',
     subdirs=['t1w'],
     output_dir='/tmp/training_split_3T',
     method='copy',

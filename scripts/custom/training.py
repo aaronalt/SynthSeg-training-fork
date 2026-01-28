@@ -119,7 +119,9 @@ for prefix, files in [('7t_t1w_', val_files_7t_t1), ('7t_t2w_', val_files_7t_t2)
         dest = os.path.join(all_val_paths, prefix + os.path.basename(str(f)))
         if not os.path.exists(dest):
             os.symlink(str(f), dest)
-print(all_train_paths)
+print(f"all_train_paths: {all_train_paths}")
+print(f"symlinked train files: {len(os.listdir(all_train_paths))}")
+print(f"train_files_3t: {len(train_files_3t)}, 7t_t1: {len(train_files_7t_t1)}, 7t_t2: {len(train_files_7t_t2)}")
 
 # Create a probability array
 all_train_files = sorted([f for f in os.listdir(all_train_paths) if f.endswith('.nii.gz')])

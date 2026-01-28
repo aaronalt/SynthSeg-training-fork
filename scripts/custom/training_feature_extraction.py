@@ -315,7 +315,8 @@ def training(labels_dir,
                     validation_data=val_generator,
                     phase=phase,
                     extra_callbacks=[my_alpha_scheduler],
-                    resume_epoch=resume_epoch)
+                    resume_epoch=resume_epoch,
+                    loss_manager=loss_manager)
 
     # Unfreeze base model and fine-tune
     if finetune:
@@ -334,7 +335,8 @@ def training(labels_dir,
                     extra_callbacks=[my_alpha_scheduler],
                     reinitialise_momentum=True,
                     validation_data=val_generator,
-                    phase=phase)
+                    phase=phase,
+                    loss_manager=loss_manager)
 
 
 def train_model(model,
@@ -349,7 +351,8 @@ def train_model(model,
                 extra_callbacks=None,
 		        validation_data=None,
                 phase=None,
-		resume_epoch=None):
+		        resume_epoch=None,
+                loss_manager=loss_manager):
 
     # prepare model and log folders
     utils.mkdir(model_dir)

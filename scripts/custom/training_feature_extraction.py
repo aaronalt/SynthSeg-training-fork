@@ -296,6 +296,9 @@ def training(labels_dir,
     reinitialize_momentum = True
 
     resume_epoch = False
+    
+    my_alpha_scheduler = AlphaScheduler(alpha_tensor, start_epoch=5, max_alpha=0.05)
+    loss_manager = HDDiceManager(alpha_tensor)
 
     if resume_epoch:
         checkpoint = os.path.join('/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260120_103539/dice_pretrain_052_100.h5')
@@ -305,15 +308,13 @@ def training(labels_dir,
     if not skip_pretrain:
         phase = 'pretrain'
         train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch, model_dir,
-                    'dice',
+                    'hd_dice',
                     checkpoint,
                     reinitialise_momentum=reinitialize_momentum,
                     validation_data=val_generator,
                     phase=phase,
+                    extra_callbacks=[my_alpha_scheduler],
                     resume_epoch=resume_epoch)
-
-    my_alpha_scheduler = AlphaScheduler(alpha_tensor, start_epoch=5, max_alpha=0.05)
-    loss_manager = HDDiceManager(alpha_tensor)
 
     # Unfreeze base model and fine-tune
     if finetune:
@@ -326,10 +327,6 @@ def training(labels_dir,
                 layer.trainable = False
         fine_tune_lr = lr / 10
         fine_tune_epochs = int(dice_epochs / 2)
-        dice_model.compile(
-            optimizer=tf.keras.optimizers.Adam(lr=fine_tune_lr),
-            loss=loss_manager.loss
-        )
         train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir,
                     'hd_dice',
                     checkpoint,
@@ -366,8 +363,7 @@ def train_model(model,
         callbacks.extend(extra_callbacks)
 
     # TensorBoard callback
-    if metric_type == 'dice':
-        callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch'))
+    callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch'))
 
     compile_model = True
     init_epoch = 0
@@ -387,7 +383,7 @@ def train_model(model,
     if compile_model or metric_type == 'dice' or not hasattr(model, 'optimizer'):
         model.compile(
             optimizer=tf.keras.optimizers.Adam(lr=learning_rate), 
-            loss=metrics.IdentityLoss().loss)
+            loss=loss_manager.loss)
 
     # fit
     model.fit(generator,

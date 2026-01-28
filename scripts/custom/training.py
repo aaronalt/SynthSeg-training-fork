@@ -136,6 +136,18 @@ for fname in all_train_files:
 # Normalize to ensure they sum to 1.0
 subjects_prob = np.array(probs) / np.sum(probs)
 
+# Create validation probability array
+all_val_files = sorted([f for f in os.listdir(all_val_paths) if f.endswith('.nii.gz')])
+val_probs = []
+for fname in all_val_files:
+    if fname.startswith('3t_'):
+        val_probs.append(0.5 / len(val_files_3t))
+    elif fname.startswith('7t_t1w_'):
+        val_probs.append(0.3 / len(val_files_7t_t1))
+    elif fname.startswith('7t_t2w_'):
+        val_probs.append(0.2 / len(val_files_7t_t2))
+val_subjects_prob = np.array(val_probs) / np.sum(val_probs)
+
 # Pre-trained model
 path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
 # #'/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'
@@ -222,4 +234,5 @@ training(all_train_paths,
          val_path=all_val_paths,
          skip_pretrain=skip_pretrain,
          finetune=False,
-         subjects_prob=subjects_prob)
+         subjects_prob=subjects_prob,
+         val_subjects_prob=val_subjects_prob)

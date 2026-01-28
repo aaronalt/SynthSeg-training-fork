@@ -100,10 +100,15 @@ val_files_7t_t1 = list(t1w_val_path.glob('*.nii.gz'))
 val_files_7t_t2 = list(t2w_val_path.glob('*.nii.gz'))
 
 # Symlink all training/validation files into single directories
+import shutil
 all_train_paths = '/tmp/training_all_train'
 all_val_paths = '/tmp/training_all_val'
-os.makedirs(all_train_paths, exist_ok=True)
-os.makedirs(all_val_paths, exist_ok=True)
+if os.path.exists(all_train_paths):
+    shutil.rmtree(all_train_paths)
+if os.path.exists(all_val_paths):
+    shutil.rmtree(all_val_paths)
+os.makedirs(all_train_paths)
+os.makedirs(all_val_paths)
 for prefix, files in [('7t_t1w_', train_files_7t_t1), ('7t_t2w_', train_files_7t_t2), ('3t_', train_files_3t)]:
     for f in files:
         dest = os.path.join(all_train_paths, prefix + os.path.basename(str(f)))

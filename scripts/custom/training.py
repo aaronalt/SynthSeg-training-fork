@@ -122,7 +122,7 @@ for prefix, files in [('7t_t1w_', val_files_7t_t1), ('7t_t2w_', val_files_7t_t2)
 print(all_train_paths)
 
 # Create a probability array
-all_train_files = sorted(os.listdir(all_train_paths))
+all_train_files = sorted([f for f in os.listdir(all_train_paths) if f.endswith('.nii.gz')])
 probs = []
 for fname in all_train_files:
     if fname.startswith('3t_'):

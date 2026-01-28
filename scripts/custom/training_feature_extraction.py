@@ -352,7 +352,7 @@ def train_model(model,
 		        validation_data=None,
                 phase=None,
 		        resume_epoch=None,
-                loss_manager=loss_manager):
+                loss_manager=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)

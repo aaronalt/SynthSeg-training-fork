@@ -106,13 +106,13 @@ probs = []
 for p in all_train_paths:
     if "3t" in str(p):
         # Weight for 50% total
-        probs.append(0.5 / len(t3t_train_files))
+        probs.append(0.5 / len(train_files_3t))
     elif "t1w" in str(p):
         # Weight for 30% total
-        probs.append(0.3 / len(t1w_train_files))
+        probs.append(0.3 / len(train_files_7t_t1))
     elif "t2w" in str(p):
         # Weight for 20% total
-        probs.append(0.2 / len(t2w_train_files))
+        probs.append(0.2 / len(train_files_7t_t2))
 # Normalize to ensure they sum to 1.0
 subjects_prob = np.array(probs) / np.sum(probs)
 

@@ -95,11 +95,24 @@ standardize_training_labels(t3_val_path, t3_val_path)
 train_files_3t = list(t3_train_path.glob('*.nii.gz'))
 train_files_7t_t1 = list(t1w_train_path.glob('*.nii.gz'))
 train_files_7t_t2 = list(t2w_train_path.glob('*.nii.gz'))
-all_train_paths = train_files_7t_t1 + train_files_7t_t2 + train_files_3t
 val_files_3t = list(t3_val_path.glob('*.nii.gz'))
 val_files_7t_t1 = list(t1w_val_path.glob('*.nii.gz'))
 val_files_7t_t2 = list(t2w_val_path.glob('*.nii.gz'))
-all_val_paths = val_files_7t_t1 + val_files_7t_t2 + val_files_3t
+
+# Symlink all training/validation files into single directories
+all_train_paths = '/tmp/training_all_train'
+all_val_paths = '/tmp/training_all_val'
+os.makedirs(all_train_paths, exist_ok=True)
+os.makedirs(all_val_paths, exist_ok=True)
+for f in train_files_7t_t1 + train_files_7t_t2 + train_files_3t:
+    dest = os.path.join(all_train_paths, os.path.basename(str(f)))
+    if not os.path.exists(dest):
+        os.symlink(str(f), dest)
+for f in val_files_7t_t1 + val_files_7t_t2 + val_files_3t:
+    dest = os.path.join(all_val_paths, os.path.basename(str(f)))
+    if not os.path.exists(dest):
+        os.symlink(str(f), dest)
+print(all_train_paths)
 
 # Create a probability array
 probs = []

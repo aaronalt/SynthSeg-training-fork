@@ -6,6 +6,7 @@ Optimized for NVIDIA RTX 2000 Ada with CUDA 12.x and TensorFlow 2.15
 
 import os
 import tensorflow as tf
+import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
@@ -20,7 +21,6 @@ if gpus:
 
 import datetime
 import numpy as np
-import sys
 # from SynthSeg.training import training
 from create_train_test_split import create_train_test_split, extract_test_from_validation
 from standardize_labels import standardize_training_labels

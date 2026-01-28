@@ -103,7 +103,7 @@ all_val_paths = val_files_7t_t1 + val_files_7t_t2 + val_files_3t
 
 # Create a probability array
 probs = []
-for p in all_label_paths:
+for p in all_train_paths:
     if "3t" in str(p):
         # Weight for 50% total
         probs.append(0.5 / len(t3t_train_files))

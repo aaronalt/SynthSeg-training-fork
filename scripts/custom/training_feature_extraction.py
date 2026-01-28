@@ -84,7 +84,7 @@ def dice_loss(y_true, y_pred):
     return 1. - (2. * intersect + smooth) / (denominator + smooth)
 
 
-def boundary_loss(y_true, y_pred, file_path):
+def boundary_loss(y_true, y_pred):
     dist_map = compute_edt_distance(y_true)
     return tf.reduce_mean(y_pred * dist_map)
 

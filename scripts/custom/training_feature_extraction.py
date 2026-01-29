@@ -127,9 +127,6 @@ def combined_metrics_model(input_model, label_list):
     labels_gt = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, dtype='int32'), depth=n_labels, axis=-1))(labels_gt)
     labels_gt = KL.Reshape(input_shape)(labels_gt)
 
-    labels_gt._keras_shape = tuple(labels_gt.get_shape().as_list())
-    last_tensor._keras_shape = tuple(last_tensor.get_shape().as_list())
-
     loss_tensor = CombinedLossLayer()([labels_gt, last_tensor])
     return Model(inputs=input_model.inputs, outputs=loss_tensor)
 

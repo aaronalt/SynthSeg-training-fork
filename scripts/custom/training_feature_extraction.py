@@ -89,20 +89,49 @@ def boundary_loss(y_true, y_pred):
     return tf.reduce_mean(y_pred * dist_map)
 
 
-def combined_hd_dice_loss(y_true, y_pred):
-    """
-    Alpha balances the two.
-    Start with alpha=0.01 or 0.1 so Dice still handles the volume.
-    """
-    # Note: Hausdorff approximations work best on 'soft' probabilities
-    dice = dice_loss(y_true, y_pred)
+def combined_loss(y_true, y_pred):
+    d_loss = dice_loss(y_true, y_pred)
+    b_loss = boundary_loss(y_true, y_pred)
+    tf.print("Dice:", d_loss, "Boundary:", b_loss, "Alpha:", alpha_tensor)
+    return d_loss + (alpha_tensor * b_loss)
 
-    # Spatial penalty (HD Proxy)
-    # We use the Euclidean distance between boundaries
-    # This prevents the 28mm outliers you are seeing in T2w.
-    hd_proxy = boundary_loss(y_true, y_pred)
 
-    return dice + (alpha_tensor * hd_proxy)
+class CombinedLossLayer(keras_layers.Layer):
+    """Computes combined dice + boundary loss inside the model graph.
+    Input: [ground_truth_onehot, predictions] both shape (batch, D, H, W, n_labels)
+    Output: scalar loss value (to be used with IdentityLoss)
+    """
+    def call(self, inputs):
+        y_true, y_pred = inputs
+        d_loss = dice_loss(y_true, y_pred)
+        b_loss = boundary_loss(y_true, y_pred)
+        tf.print("Dice:", d_loss, "Boundary:", b_loss, "Alpha:", alpha_tensor)
+        return d_loss + (alpha_tensor * b_loss)
+
+
+def combined_metrics_model(input_model, label_list):
+    """Replaces metrics.metrics_model — extracts GT from the generation model
+    and computes combined dice+boundary loss inside the graph."""
+    from keras.models import Model
+    import keras.layers as KL
+
+    last_tensor = input_model.outputs[0]
+    input_shape = last_tensor.get_shape().as_list()[1:]
+    n_labels = input_shape[-1]
+    label_list = np.unique(label_list)
+    assert n_labels == len(label_list), 'label_list should be as long as the posteriors channels'
+
+    # Extract GT from generation model (same as metrics_model)
+    labels_gt = input_model.get_layer('labels_out').output
+    labels_gt = layers.ConvertLabels(label_list)(labels_gt)
+    labels_gt = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, dtype='int32'), depth=n_labels, axis=-1))(labels_gt)
+    labels_gt = KL.Reshape(input_shape)(labels_gt)
+
+    labels_gt._keras_shape = tuple(labels_gt.get_shape().as_list())
+    last_tensor._keras_shape = tuple(last_tensor.get_shape().as_list())
+
+    loss_tensor = CombinedLossLayer()([labels_gt, last_tensor])
+    return Model(inputs=input_model.inputs, outputs=loss_tensor)
 
 
 def compute_edt_distance(y_true, spacing=(1.0, 1.0, 1.0)):
@@ -291,7 +320,7 @@ def training(labels_dir,
     unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
     unet_model.trainable = False
 
-    dice_model = metrics.metrics_model(unet_model, segmentation_labels, 'dice')  # check if normalization needed
+    dice_model = combined_metrics_model(unet_model, segmentation_labels)
     dice_model.summary()
 
     reinitialize_momentum = True
@@ -386,8 +415,8 @@ def train_model(model,
     # compile
     if compile_model or metric_type == 'dice' or not hasattr(model, 'optimizer'):
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(lr=learning_rate), 
-            loss=loss_manager.loss)
+            optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
+            loss=metrics.IdentityLoss().loss)
 
     # fit
     model.fit(generator,

@@ -153,27 +153,20 @@ def compute_edt_distance(y_true, spacing=(1.0, 1.0, 1.0)):
     """
 
     def _edt_numpy(y_true_np):
-        # Initialize output array
+        # y_true_np shape: (batch, D, H, W, n_labels) — one-hot encoded
         dist_map = np.zeros_like(y_true_np, dtype=np.float32)
 
-        # Process each item in the batch
         for i in range(y_true_np.shape[0]):
-            # Squeeze to 3D for scipy
-            mask = np.squeeze(y_true_np[i]).astype(np.bool_)
+            for c in range(y_true_np.shape[-1]):
+                mask = y_true_np[i, ..., c].astype(np.bool_)
 
-            if not np.any(mask):
-                # If no claustrum is present, return a high penalty for any prediction
-                dist_map[i] = np.ones_like(y_true_np[i]) * 100.0
-                continue
+                if not np.any(mask):
+                    dist_map[i, ..., c] = 100.0
+                    continue
 
-            # Distance to background (internal distance)
-            internal_dist = distance_transform_edt(mask, sampling=spacing)
-            # Distance to foreground (external distance)
-            external_dist = distance_transform_edt(~mask, sampling=spacing)
-
-            # Signed distance: positive outside, negative inside
-            # Shape it back to (D, H, W, 1)
-            dist_map[i] = (external_dist - internal_dist)[..., np.newaxis]
+                internal_dist = distance_transform_edt(mask)
+                external_dist = distance_transform_edt(~mask)
+                dist_map[i, ..., c] = external_dist - internal_dist
 
         return dist_map
 

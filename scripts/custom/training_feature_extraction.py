@@ -129,8 +129,18 @@ def combined_metrics_model(input_model, label_list):
     labels_gt = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, dtype='int32'), depth=n_labels, axis=-1))(labels_gt)
     labels_gt = KL.Reshape(input_shape)(labels_gt)
 
-    loss_tensor = CombinedLossLayer()([labels_gt, last_tensor])
+    # Compute loss via Lambda to avoid _keras_history issues with custom layers
+    loss_tensor = KL.Lambda(
+        lambda x: _combined_loss_fn(x[0], x[1])
+    )([labels_gt, last_tensor])
     return Model(inputs=input_model.inputs, outputs=loss_tensor)
+
+
+def _combined_loss_fn(y_true, y_pred):
+    d_loss = dice_loss(y_true, y_pred)
+    b_loss = boundary_loss(y_true, y_pred)
+    tf.print("Dice:", d_loss, "Boundary:", b_loss, "Alpha:", alpha_tensor)
+    return d_loss + (alpha_tensor * b_loss)
 
 
 def compute_edt_distance(y_true, spacing=(1.0, 1.0, 1.0)):

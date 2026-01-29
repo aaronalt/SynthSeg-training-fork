@@ -154,6 +154,7 @@ def compute_edt_distance(y_true, spacing=(1.0, 1.0, 1.0)):
 
     def _edt_numpy(y_true_np):
         # y_true_np shape: (batch, D, H, W, n_labels) — one-hot encoded
+        y_true_np = y_true_np.numpy()
         dist_map = np.zeros_like(y_true_np, dtype=np.float32)
 
         for i in range(y_true_np.shape[0]):

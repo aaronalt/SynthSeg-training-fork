@@ -21,132 +21,52 @@ if gpus:
 
 import datetime
 import numpy as np
-# from SynthSeg.training import training
-from create_train_test_split import create_train_test_split, extract_test_from_validation
+from create_train_test_split_stratified import create_train_test_split, extract_test_from_validation
 from standardize_labels import standardize_training_labels
 from training_feature_extraction import training
 
 # Paths
-training_label_maps = '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels'
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 path_model_dir = os.path.join('./models/test', experiment_name)
 os.makedirs(path_model_dir, exist_ok=True)
 log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
-# Split into train/test
-t1w_train_path, t1w_val_path = create_train_test_split(
-    base_dir=training_label_maps,
-    subdirs=['t1w'],
-    output_dir='/tmp/training_split_t1w',
-    method='copy',
+# Subject-aware stratified split across 7T and 3T
+train_path, val_path, subjects_prob, val_subjects_prob = create_train_test_split(
+    base_dirs_with_subdirs=[
+        {
+            'base_dir': '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels',
+            'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
+            'field_strength': '7T',
+        },
+        {
+            'base_dir': '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels',
+            'subdirs': ['t1w'],
+            'field_strength': '3T',
+        },
+    ],
+    output_dir='/tmp/training_split',
+    method='symlink',
     test_ratio=0.3,
     seed=42,
-    verbose=False
+    prob_mode='sqrt',
+    verbose=True,
 )
 
-t2w_train_path, t2w_val_path = create_train_test_split(
-    base_dir=training_label_maps,
-    subdirs=['t2w-cor', 't2w-tra'],
-    output_dir='/tmp/training_split_t2w',
-    method='copy',
-    test_ratio=0.3,
+# Extract held-out test set from validation (subject-aware)
+extract_test_from_validation(
+    val_dir=val_path,
+    output_test_dir='/tmp/test_set',
+    test_ratio=0.5,
     seed=42,
-    verbose=False
 )
 
-t3_train_path, t3_val_path = create_train_test_split(
-    base_dir='/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels',
-    subdirs=['t1w'],
-    output_dir='/tmp/training_split_3T',
-    method='copy',
-    test_ratio=0.3,
-    seed=42,
-    verbose=False
-)
-
-extract_test_from_validation(
-    val_dir=t1w_val_path,
-    output_test_dir='/tmp/test_t1w',
-    test_ratio=0.5,
-    seed=42
-)
-
-extract_test_from_validation(
-    val_dir=t2w_val_path,
-    output_test_dir='/tmp/test_t2w',
-    test_ratio=0.5,
-    seed=42
-)
-
-extract_test_from_validation(
-    val_dir=t3_val_path,
-    output_test_dir='/tmp/test_3T',
-    test_ratio=0.5,
-    seed=42
-)
-
-standardize_training_labels(t1w_train_path, t1w_train_path)
-standardize_training_labels(t1w_val_path, t1w_val_path)
-standardize_training_labels(t2w_train_path, t2w_train_path)
-standardize_training_labels(t2w_val_path, t2w_val_path)
-standardize_training_labels(t3_train_path, t3_train_path)
-standardize_training_labels(t3_val_path, t3_val_path)
-train_files_3t = list(t3_train_path.glob('*.nii.gz'))
-train_files_7t_t1 = list(t1w_train_path.glob('*.nii.gz'))
-train_files_7t_t2 = list(t2w_train_path.glob('*.nii.gz'))
-val_files_3t = list(t3_val_path.glob('*.nii.gz'))
-val_files_7t_t1 = list(t1w_val_path.glob('*.nii.gz'))
-val_files_7t_t2 = list(t2w_val_path.glob('*.nii.gz'))
-
-# Symlink all training/validation files into single directories
-import shutil
-all_train_paths = '/tmp/training_all_train'
-all_val_paths = '/tmp/training_all_val'
-if os.path.exists(all_train_paths):
-    shutil.rmtree(all_train_paths)
-if os.path.exists(all_val_paths):
-    shutil.rmtree(all_val_paths)
-os.makedirs(all_train_paths)
-os.makedirs(all_val_paths)
-for prefix, files in [('7t_t1w_', train_files_7t_t1), ('7t_t2w_', train_files_7t_t2), ('3t_', train_files_3t)]:
-    for f in files:
-        dest = os.path.join(all_train_paths, prefix + os.path.basename(str(f)))
-        if not os.path.exists(dest):
-            os.symlink(str(f), dest)
-for prefix, files in [('7t_t1w_', val_files_7t_t1), ('7t_t2w_', val_files_7t_t2), ('3t_', val_files_3t)]:
-    for f in files:
-        dest = os.path.join(all_val_paths, prefix + os.path.basename(str(f)))
-        if not os.path.exists(dest):
-            os.symlink(str(f), dest)
-print(f"all_train_paths: {all_train_paths}")
-print(f"symlinked train files: {len(os.listdir(all_train_paths))}")
-print(f"train_files_3t: {len(train_files_3t)}, 7t_t1: {len(train_files_7t_t1)}, 7t_t2: {len(train_files_7t_t2)}")
-
-# Create a probability array
-all_train_files = sorted([f for f in os.listdir(all_train_paths) if f.endswith('.nii.gz')])
-probs = []
-for fname in all_train_files:
-    if fname.startswith('3t_'):
-        probs.append(0.5 / len(train_files_3t))
-    elif fname.startswith('7t_t1w_'):
-        probs.append(0.3 / len(train_files_7t_t1))
-    elif fname.startswith('7t_t2w_'):
-        probs.append(0.2 / len(train_files_7t_t2))
-# Normalize to ensure they sum to 1.0
-subjects_prob = np.array(probs) / np.sum(probs)
-
-# Create validation probability array
-all_val_files = sorted([f for f in os.listdir(all_val_paths) if f.endswith('.nii.gz')])
-val_probs = []
-for fname in all_val_files:
-    if fname.startswith('3t_'):
-        val_probs.append(0.5 / len(val_files_3t))
-    elif fname.startswith('7t_t1w_'):
-        val_probs.append(0.3 / len(val_files_7t_t1))
-    elif fname.startswith('7t_t2w_'):
-        val_probs.append(0.2 / len(val_files_7t_t2))
-val_subjects_prob = np.array(val_probs) / np.sum(val_probs)
+# Standardize labels
+all_train_paths = str(train_path)
+all_val_paths = str(val_path)
+standardize_training_labels(train_path, train_path)
+standardize_training_labels(val_path, val_path)
 
 # Pre-trained model
 path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
@@ -172,9 +92,9 @@ path_generation_labels = np.array([0, 14, 15, 16, 24,
                                    2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
                                    41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 n_neutral_labels = 5
-path_segmentation_labels = np.array([0, 14, 15, 16, 24,
-                                     2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
-                                     41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
+path_segmentation_labels = np.array([0, 0, 0, 0, 0,
+                                     2, 3, 0, 0, 0, 0, 0, 0, 12, 0, 17, 18, 0, 0, 138,
+                                     41, 42, 0, 0, 0, 0, 0, 0, 51, 0, 53, 54, 0, 0, 139])
 
 # Shape and resolution
 target_res = 0.35
@@ -189,12 +109,12 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
 
 # Spatial deformation parameters
 flipping = False
-scaling_bounds = 0.2
-rotation_bounds = 15
-shearing_bounds = 0.012
+scaling_bounds = 0.1
+rotation_bounds = 5
+shearing_bounds = 0.005
 translation_bounds = False
-nonlin_std = 4.0
-bias_field_std = 0.7
+nonlin_std = 1.0
+bias_field_std = 0.2
 
 # Acquisition resolution parameters
 randomise_res = True

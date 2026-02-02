@@ -20,6 +20,7 @@ License.
 
 # python imports
 import os
+import json
 import keras
 import numpy as np
 import tensorflow as tf
@@ -176,6 +177,26 @@ def compute_edt_distance(y_true, spacing=(1.0, 1.0, 1.0)):
     return tf.py_function(_edt_numpy, [y_true], tf.float32)
 
 
+def save_training_params(model_dir, params):
+    """Save training parameters to a JSON file in the model directory."""
+    param_file = os.path.join(model_dir, 'training_params.json')
+    serializable = {}
+    for k, v in params.items():
+        if isinstance(v, np.ndarray):
+            serializable[k] = v.tolist()
+        elif isinstance(v, (np.integer,)):
+            serializable[k] = int(v)
+        elif isinstance(v, (np.floating,)):
+            serializable[k] = float(v)
+        elif isinstance(v, (str, int, float, bool, list, type(None))):
+            serializable[k] = v
+        else:
+            serializable[k] = str(v)
+    with open(param_file, 'w') as f:
+        json.dump(serializable, f, indent=2)
+    print(f"Saved training parameters to {param_file}")
+
+
 def training(labels_dir,
              model_dir,
              generation_labels=None,
@@ -226,6 +247,46 @@ def training(labels_dir,
     # check epochs
     assert (wl2_epochs > 0) | (dice_epochs > 0), \
         'either wl2_epochs or dice_epochs must be positive, had {0} and {1}'.format(wl2_epochs, dice_epochs)
+
+    # save all training parameters
+    save_training_params(model_dir, {
+        'labels_dir': labels_dir,
+        'val_path': val_path,
+        'checkpoint': checkpoint,
+        'batchsize': batchsize,
+        'n_channels': n_channels,
+        'target_res': target_res,
+        'output_shape': output_shape,
+        'generation_labels': generation_labels,
+        'segmentation_labels': segmentation_labels,
+        'n_neutral_labels': n_neutral_labels,
+        'generation_classes': generation_classes,
+        'prior_distributions': prior_distributions,
+        'flipping': flipping,
+        'scaling_bounds': scaling_bounds,
+        'rotation_bounds': rotation_bounds,
+        'shearing_bounds': shearing_bounds,
+        'translation_bounds': translation_bounds,
+        'nonlin_std': nonlin_std,
+        'nonlin_scale': nonlin_scale,
+        'randomise_res': randomise_res,
+        'max_res_iso': max_res_iso,
+        'max_res_aniso': max_res_aniso,
+        'bias_field_std': bias_field_std,
+        'bias_scale': bias_scale,
+        'n_levels': n_levels,
+        'nb_conv_per_level': nb_conv_per_level,
+        'conv_size': conv_size,
+        'unet_feat_count': unet_feat_count,
+        'feat_multiplier': feat_multiplier,
+        'activation': activation,
+        'lr': lr,
+        'wl2_epochs': wl2_epochs,
+        'dice_epochs': dice_epochs,
+        'steps_per_epoch': steps_per_epoch,
+        'skip_pretrain': skip_pretrain,
+        'finetune': finetune,
+    })
 
     # get label lists
     generation_labels, _ = utils.get_list_labels(label_list=generation_labels, labels_dir=labels_dir)

@@ -48,7 +48,7 @@ alpha_tensor = K.variable(0.0, name='loss_alpha')
 
 
 class AlphaScheduler(KC.Callback):
-    def __init__(self, alpha_var, start_epoch=5, max_alpha=0.05, ramp_steps=10):
+    def __init__(self, alpha_var, start_epoch=5, max_alpha=0.01, ramp_steps=10):
         super().__init__()
         self.alpha_var = alpha_var
         self.start_epoch = start_epoch
@@ -394,6 +394,9 @@ def train_model(model,
     # model saving callback
     save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_type, phase, n_epochs))
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
+
+    # early stopping on validation loss
+    callbacks.append(KC.EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True))
 
     if extra_callbacks:
         callbacks.extend(extra_callbacks)

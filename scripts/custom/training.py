@@ -8,6 +8,8 @@ import os
 import tensorflow as tf
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import resource
+resource.setrlimit(resource.RLIMIT_NOFILE, (65536, 65536))
 '''
 # Configure GPU for TensorFlow 2.15
 print("=== GPU Configuration ===")
@@ -70,6 +72,16 @@ all_val_paths = str(val_path)
 standardize_training_labels(train_path, train_path)
 standardize_training_labels(val_path, val_path)
 
+# Filter validation to only 3T data
+from ext.lab2im import utils as lab2im_utils
+val_files = lab2im_utils.list_images_in_folder(val_path)
+val_files_3T = [f for f in val_files if '3T' in os.path.basename(f)]
+val_3T_list = '/home/althause/data/training_split/val_3T_files.txt'
+with open(val_3T_list, 'w') as f:
+    f.write('\n'.join(val_files_3T))
+print(f"Filtered validation to {len(val_files_3T)}/{len(val_files)} 3T files")
+all_val_paths = val_3T_list
+val_subjects_prob = None
 # Pre-trained model
 path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
 # #'/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'

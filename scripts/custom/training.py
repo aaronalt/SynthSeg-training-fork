@@ -34,18 +34,13 @@ os.makedirs(path_model_dir, exist_ok=True)
 log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
-# Subject-aware stratified split across 7T and 3T
+# Subject-aware stratified split - train on 7T only
 train_path, val_path, subjects_prob, val_subjects_prob = create_train_test_split(
     base_dirs_with_subdirs=[
         {
             'base_dir': '/home/althause/data/7T/training_labels',
             'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
             'field_strength': '7T',
-        },
-        {
-            'base_dir': '/home/althause/data/3T/training_labels',
-            'subdirs': ['t1w'],
-            'field_strength': '3T',
         },
     ],
     output_dir='/home/althause/data/training_split',
@@ -56,19 +51,62 @@ train_path, val_path, subjects_prob, val_subjects_prob = create_train_test_split
     verbose=True,
 )
 
-# Extract held-out test set from validation (subject-aware)
-extract_test_from_validation(
-    val_dir=val_path,
-    output_test_dir='/home/althause/data/test_set',
-    test_ratio=0.5,
+# Separate split for 3T validation/test data
+train_path_3T, _, _, _ = create_train_test_split(
+    base_dirs_with_subdirs=[
+        {
+            'base_dir': '/home/althause/data/3T/training_labels',
+            'subdirs': ['t1w'],
+            'field_strength': '3T',
+        },
+    ],
+    output_dir='/home/althause/data/training_split_3T',
+    method='symlink',
+    test_ratio=0.0,  # All goes to "train" which we'll use as val/test pool
     seed=42,
+    prob_mode='sqrt',
+    verbose=True,
 )
+
+# Note: 3T test set is created separately below (test_3T_dir)
+# 7T test data can still be extracted if needed:
+# extract_test_from_validation(val_dir=val_path, output_test_dir='/home/althause/data/test_set_7T', test_ratio=0.5, seed=42)
 
 # Standardize labels
 all_train_paths = str(train_path)
-all_val_paths = str(val_path)
 standardize_training_labels(train_path, train_path)
-standardize_training_labels(val_path, val_path)
+
+# Split 3T data into validation (70%) and test (30%)
+import shutil
+from ext.lab2im import utils as lab2im_utils
+
+val_files_3T = lab2im_utils.list_images_in_folder(train_path_3T)
+np.random.seed(42)
+np.random.shuffle(val_files_3T)
+split_idx = int(len(val_files_3T) * 0.7)
+val_files_3T_final = val_files_3T[:split_idx]
+test_files_3T = val_files_3T[split_idx:]
+
+# Create 3T validation directory
+val_3T_dir = '/home/althause/data/training_split/val_3T'
+if os.path.exists(val_3T_dir):
+    shutil.rmtree(val_3T_dir)
+os.makedirs(val_3T_dir)
+for f in val_files_3T_final:
+    os.symlink(f, os.path.join(val_3T_dir, os.path.basename(f)))
+
+# Create 3T test directory
+test_3T_dir = '/home/althause/data/training_split/test_3T'
+if os.path.exists(test_3T_dir):
+    shutil.rmtree(test_3T_dir)
+os.makedirs(test_3T_dir)
+for f in test_files_3T:
+    os.symlink(f, os.path.join(test_3T_dir, os.path.basename(f)))
+
+print(f"3T split: {len(val_files_3T_final)} validation, {len(test_files_3T)} test")
+all_val_paths = val_3T_dir
+val_subjects_prob = None  # Reset since we're using filtered list
+standardize_training_labels(val_3T_dir, val_3T_dir)
 
 # Pre-trained model
 path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'

@@ -109,8 +109,8 @@ val_subjects_prob = None  # Reset since we're using filtered list
 standardize_training_labels(val_3T_dir, val_3T_dir)
 
 # Pre-trained model
-path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
-# #'/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'
+# path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'  # Original pretrained weights
+path_checkpoint = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260203_184041/dice_finetune_020_20.h5'  # Resume from last checkpoint
 batchsize = 1
 
 # Architecture parameters
@@ -122,9 +122,9 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-4
-wl2_epochs = 2
-dice_epochs = 20
+lr = 1e-5  # Lower LR for continued training
+wl2_epochs = 0  # Skip WL2 warmup when resuming
+dice_epochs = 30  # 30 more epochs
 steps_per_epoch = 1000
 
 # Generation and segmentation labels

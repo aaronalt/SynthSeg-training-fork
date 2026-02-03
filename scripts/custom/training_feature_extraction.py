@@ -142,7 +142,8 @@ def training(labels_dir,
              checkpoint=None,
              val_path=None,
              skip_pretrain=False,
-             finetune=False):
+             finetune=False,
+             validation_steps=100):
 
     # check epochs
     assert (wl2_epochs > 0) | (dice_epochs > 0), \
@@ -317,7 +318,8 @@ def training(labels_dir,
                     checkpoint,
                     reinitialise_momentum=True,
                     validation_data=val_generator,
-                    phase='wl2')
+                    phase='wl2',
+                    validation_steps=validation_steps)
 
         # Update checkpoint to the WL2 trained weights
         checkpoint = os.path.join(model_dir, 'wl2_wl2_%03d_%d.h5' % (wl2_epochs, wl2_epochs))
@@ -347,7 +349,8 @@ def training(labels_dir,
                     checkpoint,
                     reinitialise_momentum=True,
                     validation_data=val_generator,
-                    phase='finetune')
+                    phase='finetune',
+                    validation_steps=validation_steps)
 
 
 def train_model(model,
@@ -362,7 +365,8 @@ def train_model(model,
                 extra_callbacks=None,
 		        validation_data=None,
                 phase=None,
-		        resume_epoch=None):
+		        resume_epoch=None,
+                validation_steps=100):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -409,4 +413,4 @@ def train_model(model,
                         callbacks=callbacks,
                         initial_epoch=init_epoch,
 			validation_data=validation_data,
-			validation_steps=100)
+			validation_steps=validation_steps)

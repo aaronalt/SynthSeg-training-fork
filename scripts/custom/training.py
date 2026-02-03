@@ -125,9 +125,10 @@ thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
 
 path_mri = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/testing'
 path_training_labels = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels/t1w'
-means, stds = build_intensity_stats(path_mri, path_training_labels,
+means, stds = build_intensity_stats(path_mri, path_training_labels, path_mri,
                                     estimation_labels=path_generation_labels,
-                                    estimation_classes=path_generation_classes)
+                                    estimation_classes=path_generation_classes
+                                    )
 
 # Start training - pretrain
 skip_pretrain = False

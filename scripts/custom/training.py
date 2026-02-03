@@ -110,7 +110,7 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
-flipping = False
+flipping = True
 scaling_bounds = 0.1
 rotation_bounds = 5
 shearing_bounds = 0.005

@@ -8,8 +8,8 @@ import os
 import tensorflow as tf
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+'''
 # Configure GPU for TensorFlow 2.15
-
 print("=== GPU Configuration ===")
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -19,7 +19,7 @@ if gpus:
         print(f"Configured {len(gpus)} GPU(s) with memory growth enabled")
     except RuntimeError as e:
         print(f"GPU configuration error: {e}")
-
+'''
 import datetime
 import numpy as np
 from create_train_test_split_stratified import create_train_test_split, extract_test_from_validation
@@ -85,7 +85,7 @@ feat_multiplier = 2
 
 # Training parameters
 lr = 1e-6
-wl2_epochs = 0
+wl2_epochs = 2
 dice_epochs = 20
 steps_per_epoch = 1000
 

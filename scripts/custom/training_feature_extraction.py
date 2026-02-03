@@ -27,7 +27,6 @@ import tensorflow as tf
 from keras import models
 import keras.callbacks as KC
 from keras.optimizers import Adam
-from scipy.ndimage import distance_transform_edt
 import tensorflow.keras.backend as K
 from inspect import getmembers, isclass
 from tensorflow.keras.callbacks import Callback
@@ -45,39 +44,6 @@ from ext.neuron import models as nrn_models
 import threading
 
 
-alpha_tensor = K.variable(0.0, name='loss_alpha')
-
-
-class AlphaScheduler(KC.Callback):
-    def __init__(self, alpha_var, start_epoch=5, max_alpha=0.01, ramp_steps=10):
-        super().__init__()
-        self.alpha_var = alpha_var
-        self.start_epoch = start_epoch
-        self.max_alpha = max_alpha
-        self.ramp_steps = ramp_steps
-
-    def on_epoch_begin(self, epoch, logs=None):
-        if epoch < self.start_epoch:
-            new_val = 0.0
-        else:
-            # Linear ramp from 0 to max_alpha over ramp_steps
-            progress = (epoch - self.start_epoch) / self.ramp_steps
-            new_val = min(self.max_alpha, progress * self.max_alpha)
-
-        K.set_value(self.alpha_var, new_val)
-        print(f"\n[Epoch {epoch + 1}] Current Alpha (Boundary Penalty): {new_val:.4f}")
-
-
-class HDDiceManager:
-    def __init__(self, alpha=0.01):
-        self.alpha = alpha
-
-    def loss(self, y_true, y_pred):
-        d_loss = dice_loss(y_true, y_pred)
-        h_loss = boundary_loss(y_true, y_pred)
-        return d_loss + (self.alpha * h_loss)
-
-
 def dice_loss(y_true, y_pred):
     smooth = 1e-5
     intersect = tf.reduce_sum(y_true * y_pred)
@@ -85,34 +51,8 @@ def dice_loss(y_true, y_pred):
     return 1. - (2. * intersect + smooth) / (denominator + smooth)
 
 
-def boundary_loss(y_true, y_pred):
-    dist_map = compute_edt_distance(y_true)
-    return tf.reduce_mean(y_pred * dist_map)
-
-
-def combined_loss(y_true, y_pred):
-    d_loss = dice_loss(y_true, y_pred)
-    b_loss = boundary_loss(y_true, y_pred)
-    tf.print("Dice:", d_loss, "Boundary:", b_loss, "Alpha:", alpha_tensor)
-    return d_loss + (alpha_tensor * b_loss)
-
-
-class CombinedLossLayer(keras_layers.Layer):
-    """Computes combined dice + boundary loss inside the model graph.
-    Input: [ground_truth_onehot, predictions] both shape (batch, D, H, W, n_labels)
-    Output: scalar loss value (to be used with IdentityLoss)
-    """
-    def call(self, inputs):
-        y_true, y_pred = inputs
-        d_loss = dice_loss(y_true, y_pred)
-        b_loss = boundary_loss(y_true, y_pred)
-        tf.print("Dice:", d_loss, "Boundary:", b_loss, "Alpha:", alpha_tensor)
-        return d_loss + (alpha_tensor * b_loss)
-
-
-def combined_metrics_model(input_model, label_list):
-    """Replaces metrics.metrics_model — extracts GT from the generation model
-    and computes combined dice+boundary loss inside the graph."""
+def dice_metrics_model(input_model, label_list):
+    """Extracts GT from the generation model and computes dice loss inside the graph."""
     from keras.models import Model
     import keras.layers as KL
 
@@ -130,51 +70,11 @@ def combined_metrics_model(input_model, label_list):
     labels_gt = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, dtype='int32'), depth=n_labels, axis=-1))(labels_gt)
     labels_gt = KL.Reshape(input_shape)(labels_gt)
 
-    # Compute loss via Lambda to avoid _keras_history issues with custom layers
+    # Compute dice loss
     loss_tensor = KL.Lambda(
-        lambda x: _combined_loss_fn(x[0], x[1])
+        lambda x: dice_loss(x[0], x[1])
     )([labels_gt, last_tensor])
     return Model(inputs=input_model.inputs, outputs=loss_tensor)
-
-
-def _combined_loss_fn(y_true, y_pred):
-    d_loss = dice_loss(y_true, y_pred)
-    b_loss = boundary_loss(y_true, y_pred)
-    tf.print("Dice:", d_loss, "Boundary:", b_loss, "Alpha:", alpha_tensor)
-    return d_loss + (alpha_tensor * b_loss)
-
-
-def compute_edt_distance(y_true, spacing=(1.0, 1.0, 1.0)):
-    """
-    Computes the Euclidean Distance Transform for a binary label.
-
-    Args:
-        y_true: Ground truth binary mask (Batch, D, H, W, 1)
-        spacing: Physical distance between voxels (Anisotropy)
-    """
-
-    def _edt_numpy(y_true_np):
-        # y_true_np shape: (batch, D, H, W, n_labels) — one-hot encoded
-        y_true_np = y_true_np.numpy()
-        dist_map = np.zeros_like(y_true_np, dtype=np.float32)
-
-        for i in range(y_true_np.shape[0]):
-            for c in range(y_true_np.shape[-1]):
-                mask = y_true_np[i, ..., c].astype(np.bool_)
-
-                if not np.any(mask):
-                    dist_map[i, ..., c] = 100.0
-                    continue
-
-                internal_dist = distance_transform_edt(mask)
-                external_dist = distance_transform_edt(~mask)
-                dist_map[i, ..., c] = external_dist - internal_dist
-
-        return dist_map
-
-    # Wrap the numpy function so TensorFlow can call it during the forward pass
-    y_true = tf.cast(y_true, tf.float32)
-    return tf.py_function(_edt_numpy, [y_true], tf.float32)
 
 
 def save_training_params(model_dir, params):
@@ -381,55 +281,73 @@ def training(labels_dir,
     val_generator = utils.build_training_generator(val_brain_generator.model_inputs_generator, batchsize)
     input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
 
-    unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
-    unet_model.trainable = False
+    # Load pretrained weights
+    if checkpoint is not None:
+        unet_model.load_weights(checkpoint, by_name=True, skip_mismatch=True)
 
-    dice_model = combined_metrics_model(unet_model, segmentation_labels)
-    dice_model.summary()
+    # -------------------------------------------------------------------------
+    # Phase 1: WL2 Warmup (frozen encoder, train decoder/output layers only)
+    # -------------------------------------------------------------------------
+    if wl2_epochs > 0 and not skip_pretrain:
+        print("\n=== WL2 Warmup Phase: Freezing encoder layers ===")
 
-    reinitialize_momentum = True
+        # Freeze encoder layers (down arm), keep decoder trainable
+        for layer in unet_model.layers:
+            # Freeze layers that are part of the encoder (down path)
+            # Patterns: unet_conv_downarm_*, unet_maxpool_*, unet_bn_down_*
+            if '_downarm_' in layer.name or '_maxpool_' in layer.name or '_bn_down_' in layer.name:
+                layer.trainable = False
+            # Keep BatchNorm frozen regardless
+            elif isinstance(layer, tf.keras.layers.BatchNormalization):
+                layer.trainable = False
+            else:
+                layer.trainable = True
 
-    resume_epoch = False
-    
-    my_alpha_scheduler = AlphaScheduler(alpha_tensor, start_epoch=5, max_alpha=0.01)
-    loss_manager = HDDiceManager(alpha_tensor)
+        # Print layer status for verification
+        print("\nLayer trainability:")
+        for layer in unet_model.layers:
+            if hasattr(layer, 'trainable'):
+                print(f"  {layer.name}: {'trainable' if layer.trainable else 'frozen'}")
 
-    if resume_epoch:
-        checkpoint = os.path.join('/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260120_103539/dice_pretrain_052_100.h5')
-        reinitialize_momentum = False
-        resume_epoch = 48
+        wl2_model = models.Model(unet_model.inputs, unet_model.outputs)
+        wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
 
-    if not skip_pretrain:
-        phase = 'pretrain'
-        train_model(dice_model, input_generator, lr, dice_epochs, steps_per_epoch, model_dir,
-                    'hd_dice',
+        train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir,
+                    'wl2',
                     checkpoint,
-                    reinitialise_momentum=reinitialize_momentum,
+                    reinitialise_momentum=True,
                     validation_data=val_generator,
-                    phase=phase,
-                    extra_callbacks=[my_alpha_scheduler],
-                    resume_epoch=resume_epoch,
-                    loss_manager=loss_manager)
+                    phase='wl2')
 
-    # Unfreeze base model and fine-tune
-    if finetune:
-        phase = 'finetune'
-        if skip_pretrain:
-            checkpoint = os.path.join('best_pretrain_model')
-        unet_model.trainable = True
+        # Update checkpoint to the WL2 trained weights
+        checkpoint = os.path.join(model_dir, 'wl2_wl2_%03d_%d.h5' % (wl2_epochs, wl2_epochs))
+
+    # -------------------------------------------------------------------------
+    # Phase 2: Finetune (unfreeze all layers except BatchNorm)
+    # -------------------------------------------------------------------------
+    if dice_epochs > 0:
+        print("\n=== Finetune Phase: Unfreezing all layers (except BatchNorm) ===")
+
+        # Unfreeze all layers except BatchNorm
         for layer in unet_model.layers:
             if isinstance(layer, tf.keras.layers.BatchNormalization):
                 layer.trainable = False
-        fine_tune_lr = lr / 10
-        fine_tune_epochs = int(dice_epochs / 2)
-        train_model(dice_model, input_generator, fine_tune_lr, fine_tune_epochs, steps_per_epoch, model_dir,
-                    'hd_dice',
+            else:
+                layer.trainable = True
+
+        # Create fresh dice model with unfrozen weights
+        dice_model = models.Model(unet_model.inputs, unet_model.outputs)
+        dice_model = metrics.metrics_model(dice_model, segmentation_labels, 'dice')
+
+        # Use lower learning rate for finetuning
+        finetune_lr = lr / 10
+
+        train_model(dice_model, input_generator, finetune_lr, dice_epochs, steps_per_epoch, model_dir,
+                    'dice',
                     checkpoint,
-                    extra_callbacks=[my_alpha_scheduler],
                     reinitialise_momentum=True,
                     validation_data=val_generator,
-                    phase=phase,
-                    loss_manager=loss_manager)
+                    phase='finetune')
 
 
 def train_model(model,
@@ -444,8 +362,7 @@ def train_model(model,
                 extra_callbacks=None,
 		        validation_data=None,
                 phase=None,
-		        resume_epoch=None,
-                loss_manager=None):
+		        resume_epoch=None):
 
     # prepare model and log folders
     utils.mkdir(model_dir)

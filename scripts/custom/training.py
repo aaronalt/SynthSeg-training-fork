@@ -84,7 +84,7 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-6
+lr = 1e-4
 wl2_epochs = 2
 dice_epochs = 20
 steps_per_epoch = 1000
@@ -110,7 +110,7 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
-flipping = True
+flipping = False
 scaling_bounds = 0.1
 rotation_bounds = 5
 shearing_bounds = 0.005

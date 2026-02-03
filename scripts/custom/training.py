@@ -9,7 +9,7 @@ import tensorflow as tf
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 # Configure GPU for TensorFlow 2.15
-'''
+
 print("=== GPU Configuration ===")
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -19,7 +19,7 @@ if gpus:
         print(f"Configured {len(gpus)} GPU(s) with memory growth enabled")
     except RuntimeError as e:
         print(f"GPU configuration error: {e}")
-'''
+
 import datetime
 import numpy as np
 from create_train_test_split_stratified import create_train_test_split, extract_test_from_validation
@@ -110,7 +110,7 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
-flipping = True
+flipping = False
 scaling_bounds = 0.1
 rotation_bounds = 5
 shearing_bounds = 0.005
@@ -123,7 +123,11 @@ randomise_res = False
 data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
 thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
 
-means, stds = build_intensity_stats(generation_labels, output_labels, n_neutral_labels)
+path_mri = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/testing'
+path_training_labels = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels/t1w'
+means, stds = build_intensity_stats(path_mri, path_training_labels,
+                                    estimation_labels=path_generation_labels,
+                                    estimation_classes=path_generation_classes)
 
 # Start training - pretrain
 skip_pretrain = False

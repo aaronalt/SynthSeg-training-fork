@@ -123,12 +123,16 @@ randomise_res = False
 data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
 thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
 
-path_mri = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/testing'
-path_training_labels = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels/t1w'
+path_mri = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/intensity_estimation/images'
+path_training_labels = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/intensity_estimation/labels'
+'''
 means, stds = build_intensity_stats(path_mri, path_training_labels, path_mri,
                                     estimation_labels=path_generation_labels,
                                     estimation_classes=path_generation_classes
                                     )
+'''
+means = np.load(os.path.join(path_mri, 'prior_means.npy'))
+stds = np.load(os.path.join(path_mri, 'prior_stds.npy'))
 
 # Start training - pretrain
 skip_pretrain = False

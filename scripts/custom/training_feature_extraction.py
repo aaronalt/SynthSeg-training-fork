@@ -391,7 +391,7 @@ def training(labels_dir,
 
     resume_epoch = False
     
-    my_alpha_scheduler = AlphaScheduler(alpha_tensor, start_epoch=5, max_alpha=0.05)
+    my_alpha_scheduler = AlphaScheduler(alpha_tensor, start_epoch=5, max_alpha=0.01)
     loss_manager = HDDiceManager(alpha_tensor)
 
     if resume_epoch:

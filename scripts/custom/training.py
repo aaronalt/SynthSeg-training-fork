@@ -9,6 +9,7 @@ import tensorflow as tf
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 # Configure GPU for TensorFlow 2.15
+'''
 print("=== GPU Configuration ===")
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -18,12 +19,13 @@ if gpus:
         print(f"Configured {len(gpus)} GPU(s) with memory growth enabled")
     except RuntimeError as e:
         print(f"GPU configuration error: {e}")
-
+'''
 import datetime
 import numpy as np
 from create_train_test_split_stratified import create_train_test_split, extract_test_from_validation
 from standardize_labels import standardize_training_labels
 from training_feature_extraction import training
+from SynthSeg.estimate_priors import build_intensity_stats
 
 # Paths
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -82,9 +84,9 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-5
+lr = 1e-6
 wl2_epochs = 0
-dice_epochs = 50
+dice_epochs = 20
 steps_per_epoch = 1000
 
 # Generation and segmentation labels
@@ -97,18 +99,18 @@ path_segmentation_labels = np.array([0, 0, 0, 0, 0,
                                      41, 42, 0, 0, 0, 0, 0, 0, 51, 0, 53, 54, 0, 0, 139])
 
 # Shape and resolution
-target_res = 0.35
-output_shape = 128  # Adjust based on your data
+target_res = 1.0
+output_shape = 160  # Adjust based on your data
 n_channels = 1
 
 # GMM sampling
-prior_distributions = 'uniform'
+prior_distributions = 'normal'
 path_generation_classes = np.array([0, 1, 2, 3, 4,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
-flipping = False
+flipping = True
 scaling_bounds = 0.1
 rotation_bounds = 5
 shearing_bounds = 0.005
@@ -117,7 +119,11 @@ nonlin_std = 1.0
 bias_field_std = 0.2
 
 # Acquisition resolution parameters
-randomise_res = True
+randomise_res = False
+data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
+thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
+
+means, stds = build_intensity_stats(generation_labels, output_labels, n_neutral_labels)
 
 # Start training - pretrain
 skip_pretrain = False
@@ -155,4 +161,9 @@ training(all_train_paths,
          skip_pretrain=skip_pretrain,
          finetune=False,
          subjects_prob=subjects_prob,
-         val_subjects_prob=val_subjects_prob)
+         val_subjects_prob=val_subjects_prob,
+         data_res=data_res,
+         thickness=thickness,
+         prior_means=means,
+         prior_stds=stds
+         )

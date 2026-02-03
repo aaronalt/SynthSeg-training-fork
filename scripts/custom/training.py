@@ -38,17 +38,17 @@ os.makedirs(log_dir, exist_ok=True)
 train_path, val_path, subjects_prob, val_subjects_prob = create_train_test_split(
     base_dirs_with_subdirs=[
         {
-            'base_dir': '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/training_labels',
+            'base_dir': '/home/althause/data/7T/training_labels',
             'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
             'field_strength': '7T',
         },
         {
-            'base_dir': '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/training_labels',
+            'base_dir': '/home/althause/data/3T/training_labels',
             'subdirs': ['t1w'],
             'field_strength': '3T',
         },
     ],
-    output_dir='/tmp/training_split',
+    output_dir='/home/althause/data/training_split',
     method='symlink',
     test_ratio=0.3,
     seed=42,
@@ -59,7 +59,7 @@ train_path, val_path, subjects_prob, val_subjects_prob = create_train_test_split
 # Extract held-out test set from validation (subject-aware)
 extract_test_from_validation(
     val_dir=val_path,
-    output_test_dir='/tmp/test_set',
+    output_test_dir='/home/althause/data/test_set',
     test_ratio=0.5,
     seed=42,
 )
@@ -71,7 +71,7 @@ standardize_training_labels(train_path, train_path)
 standardize_training_labels(val_path, val_path)
 
 # Pre-trained model
-path_checkpoint = '/home/aaron/nas2/DATA_inProgress/Aaron/CLAU/claustrum_model_weights/outputs/mauri_unet_weights.h5'
+path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
 # #'/home/aaron/SynthSeg-training/SynthSeg-training-fork/models/test/experiment_20260121_122955/dice_pretrain_070_100.h5'
 batchsize = 1
 
@@ -123,8 +123,8 @@ randomise_res = False
 data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
 thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
 
-path_mri = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/intensity_estimation/images'
-path_training_labels = '/home/aaron/nas2/DATA_inProgress/Aaron/3T/Nifti/derivatives/intensity_estimation/labels'
+path_mri = '/home/althause/data/intensity_estimation/images'
+path_training_labels = '/home/althause/data/intensity_estimation/labels'
 '''
 means, stds = build_intensity_stats(path_mri, path_training_labels, path_mri,
                                     estimation_labels=path_generation_labels,

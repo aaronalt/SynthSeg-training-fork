@@ -141,11 +141,12 @@ target_res = 1.0
 output_shape = 160  # Adjust based on your data
 n_channels = 1
 
-# GMM sampling
+# GMM sampling - maps each generation label to an intensity class
+# Max index must be < number of prior classes (19 classes = indices 0-18)
 prior_distributions = 'normal'
 path_generation_classes = np.array([0, 1, 2, 3, 4,
-                                    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-                                    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+                                    5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+                                    5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
 
 # Spatial deformation parameters
 flipping = True

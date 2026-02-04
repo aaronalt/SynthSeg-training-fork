@@ -23,7 +23,6 @@ if gpus:
 import datetime
 import numpy as np
 from create_train_test_split_stratified import create_train_test_split, extract_test_from_validation
-from standardize_labels import standardize_training_labels
 from training_feature_extraction import training
 from SynthSeg.estimate_priors import build_intensity_stats
 
@@ -39,14 +38,14 @@ import shutil
 from ext.lab2im import utils as lab2im_utils
 
 # 3T training/validation files (4 non-VCFS subjects - used for BOTH training and validation)
-trainval_3T_dir = '/home/althause/data/3T/training_labels/t1w'  # Your 4 3T files
+trainval_3T_dir = '/home/althause/data/3T/derivatives/training_labels_native/t1w'  # Your 4 3T files
 # 3T test files are in holdout dir (8 VCFS subjects - NOT used in training)
 
 # Subject-aware stratified split for 7T data
 train_path_7T, _, subjects_prob_7T, _ = create_train_test_split(
     base_dirs_with_subdirs=[
         {
-            'base_dir': '/home/althause/data/7T/training_labels',
+            'base_dir': '/home/althause/data/7T/training_labels_native',
             'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
             'field_strength': '7T',
         },
@@ -94,13 +93,9 @@ for f in trainval_files_3T:
     if not os.path.exists(dest):
         os.symlink(f, dest)
 
-# Standardize labels
 all_train_paths = combined_train_dir
-standardize_training_labels(combined_train_dir, combined_train_dir)
-
 all_val_paths = val_3T_dir
 val_subjects_prob = None
-standardize_training_labels(val_3T_dir, val_3T_dir)
 
 print(f"\n=== Data Split Summary ===")
 print(f"Training: {combined_train_dir} ({n_train_files} files - 7T + 3T)")

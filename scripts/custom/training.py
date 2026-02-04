@@ -122,19 +122,19 @@ feat_multiplier = 2
 
 # Training parameters
 lr = 1e-4
-wl2_epochs = 2
-dice_epochs = 100
-steps_per_epoch = 5000
+wl2_epochs = 5
+dice_epochs = 50
+steps_per_epoch = 1000
 validation_steps = 200  # More steps for stable validation with small 3T set
 
 # Generation and segmentation labels
+# Use ALL labels for segmentation - model learns full anatomy, extract claustrum at inference
 path_generation_labels = np.array([0, 14, 15, 16, 24,
                                    2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
                                    41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 n_neutral_labels = 5
-path_segmentation_labels = np.array([0, 0, 0, 0, 0,
-                                     2, 3, 0, 0, 0, 0, 0, 0, 12, 0, 17, 18, 0, 0, 138,
-                                     41, 42, 0, 0, 0, 0, 0, 0, 51, 0, 53, 54, 0, 0, 139])
+# Keep all labels distinct - no collapsing to background
+path_segmentation_labels = path_generation_labels.copy()
 
 # Shape and resolution
 target_res = 1.0
@@ -144,11 +144,11 @@ n_channels = 1
 # GMM sampling
 prior_distributions = 'normal'
 path_generation_classes = np.array([0, 1, 2, 3, 4,
-                                    5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-                                    5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
+                                    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
 
 # Spatial deformation parameters
-flipping = False
+flipping = True
 scaling_bounds = 0.1
 rotation_bounds = 5
 shearing_bounds = 0.005

@@ -51,32 +51,6 @@ def dice_loss(y_true, y_pred):
     return 1. - (2. * intersect + smooth) / (denominator + smooth)
 
 
-def dice_metrics_model(input_model, label_list):
-    """Extracts GT from the generation model and computes dice loss inside the graph."""
-    from keras.models import Model
-    import keras.layers as KL
-
-    # Get prediction tensor
-    last_tensor = input_model.outputs[0] if isinstance(input_model.outputs, list) else input_model.output
-    input_shape = last_tensor.get_shape().as_list()[1:]
-    n_labels = input_shape[-1]
-    label_list = np.unique(label_list)
-    assert n_labels == len(label_list), 'label_list should be as long as the posteriors channels'
-
-    # Extract GT from generation model (same as metrics_model)
-    labels_out_layer = input_model.get_layer('labels_out')
-    labels_gt = labels_out_layer.get_output_at(0) if hasattr(labels_out_layer, 'get_output_at') else labels_out_layer.output
-    labels_gt = layers.ConvertLabels(label_list)(labels_gt)
-    labels_gt = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, dtype='int32'), depth=n_labels, axis=-1))(labels_gt)
-    labels_gt = KL.Reshape(input_shape)(labels_gt)
-
-    # Compute dice loss
-    loss_tensor = KL.Lambda(
-        lambda x: dice_loss(x[0], x[1])
-    )([labels_gt, last_tensor])
-    return Model(inputs=input_model.inputs, outputs=loss_tensor)
-
-
 def save_training_params(model_dir, params):
     """Save training parameters to a JSON file in the model directory."""
     param_file = os.path.join(model_dir, 'training_params.json')

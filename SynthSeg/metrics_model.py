@@ -46,9 +46,7 @@ def metrics_model(input_model, label_list, metrics='dice'):
     labels_gt._keras_shape = tuple(labels_gt.get_shape().as_list())
 
     if metrics == 'dice':
-        # Use class_weights=-1 for dynamic inverse-volume weighting
-        # This prevents model collapse on small structures like claustrum
-        last_tensor = layers.DiceLoss(class_weights=-1)([labels_gt, last_tensor])
+        last_tensor = layers.DiceLoss()([labels_gt, last_tensor])
 
     elif metrics == 'wl2':
         last_tensor = layers.WeightedL2Loss(target_value=5)([labels_gt, last_tensor])

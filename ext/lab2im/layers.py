@@ -1366,11 +1366,11 @@ class DiceLoss(Layer):
         # apply class weighting across labels. In this case loss will have shape (batch), otherwise (batch, n_labels).
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
             if boundary_weights_tensor is not None:  # we account for the boundary weighting to compute volume
-                self.class_weights_tens = 1 / tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes)
+                self.class_weights_tens = 1 / (tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes) + 1e-8)
             else:
-                self.class_weights_tens = 1 / tf.reduce_sum(gt, self.spatial_axes)
+                self.class_weights_tens = 1 / (tf.reduce_sum(gt, self.spatial_axes) + 1e-8)
         if self.class_weights_tens is not None:
-            self. class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
+            self.class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
             loss = tf.reduce_sum(loss * self.class_weights_tens, -1)
 
         return tf.math.reduce_mean(loss)

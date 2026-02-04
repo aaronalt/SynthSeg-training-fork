@@ -133,7 +133,7 @@ path_segmentation_labels = path_generation_labels.copy()
 
 # Shape and resolution
 target_res = 1.0
-output_shape = 160  # Adjust based on your data
+output_shape = 256  # Increased to accommodate varying input sizes
 n_channels = 1
 
 # GMM sampling - maps each generation label to an intensity class
@@ -149,7 +149,7 @@ scaling_bounds = 0.15
 rotation_bounds = 10
 shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 2.0
+nonlin_std = 0.0
 bias_field_std = 0.7
 
 # Acquisition resolution parameters

@@ -38,7 +38,7 @@ import shutil
 from ext.lab2im import utils as lab2im_utils
 
 # 3T training/validation files (4 non-VCFS subjects - used for BOTH training and validation)
-trainval_3T_dir = '/home/althause/data/3T/derivatives/training_labels_native/t1w'  # Your 4 3T files
+trainval_3T_dir = '/home/althause/data/3T/training_labels_native/t1w'  # Your 4 3T files
 # 3T test files are in holdout dir (8 VCFS subjects - NOT used in training)
 
 # Subject-aware stratified split for 7T data

@@ -38,14 +38,14 @@ import shutil
 from ext.lab2im import utils as lab2im_utils
 
 # 3T training/validation files (4 non-VCFS subjects - used for BOTH training and validation)
-trainval_3T_dir = '/home/althause/data/3T/training_labels_native/t1w'  # Your 4 3T files
+trainval_3T_dir = '/home/althause/data/3T/training_labels_1mm/t1w'  # 1mm isotropic, 128³
 # 3T test files are in holdout dir (8 VCFS subjects - NOT used in training)
 
 # Subject-aware stratified split for 7T data
 train_path_7T, _, subjects_prob_7T, _ = create_train_test_split(
     base_dirs_with_subdirs=[
         {
-            'base_dir': '/home/althause/data/7T/training_labels_native',
+            'base_dir': '/home/althause/data/7T/training_labels_1mm',
             'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
             'field_strength': '7T',
         },
@@ -133,7 +133,7 @@ path_segmentation_labels = path_generation_labels.copy()
 
 # Shape and resolution
 target_res = 1.0
-output_shape = 256  # Increased to accommodate varying input sizes
+output_shape = 128  # All training labels resampled to 128³ @ 1mm
 n_channels = 1
 
 # GMM sampling - maps each generation label to an intensity class
@@ -149,7 +149,7 @@ scaling_bounds = 0.15
 rotation_bounds = 10
 shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 0.0
+nonlin_std = 2.0
 bias_field_std = 0.7
 
 # Acquisition resolution parameters

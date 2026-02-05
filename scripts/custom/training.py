@@ -118,9 +118,9 @@ feat_multiplier = 2
 # Training parameters
 lr = 1e-4
 wl2_epochs = 0  # Skip warmup - using pretrained weights
-dice_epochs = 200  # Train longer to learn small structures
+dice_epochs = 100  # Train longer to learn small structures
 steps_per_epoch = 1000
-validation_steps = 400  # More steps for stable validation with small 3T set
+validation_steps = 200  # More steps for stable validation with small 3T set
 
 # Generation and segmentation labels
 # Use ALL labels for segmentation - model learns full anatomy, extract claustrum at inference
@@ -145,11 +145,11 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
 
 # Spatial deformation parameters
 flipping = True
-scaling_bounds = 0.15
-rotation_bounds = 10
+scaling_bounds = 0.2
+rotation_bounds = 15
 shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 1.5
+nonlin_std = 4.0
 bias_field_std = 0.7
 
 # Acquisition resolution parameters

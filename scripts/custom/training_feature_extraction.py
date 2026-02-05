@@ -96,8 +96,8 @@ def training(labels_dir,
              nonlin_std=4.,
              nonlin_scale=.04,
              randomise_res=True,
-             max_res_iso=4.,
-             max_res_aniso=8.,
+             max_res_iso=2.,
+             max_res_aniso=4.,
              data_res=None,
              thickness=None,
              bias_field_std=.7,
@@ -352,7 +352,7 @@ def train_model(model,
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
 
     # early stopping on validation loss - high patience to allow small structures to learn
-    callbacks.append(KC.EarlyStopping(monitor='val_loss', patience=20, verbose=1, restore_best_weights=True))
+    callbacks.append(KC.EarlyStopping(monitor='val_loss', patience=5, verbose=1, restore_best_weights=True))
 
     if extra_callbacks:
         callbacks.extend(extra_callbacks)

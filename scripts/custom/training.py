@@ -39,7 +39,6 @@ from ext.lab2im import utils as lab2im_utils
 
 # 3T training/validation files (4 non-VCFS subjects - used for BOTH training and validation)
 trainval_3T_dir = '/home/althause/data/3T/training_labels_1mm_160/t1w'  # 1mm isotropic, 160³
-# 3T test files are in holdout dir (8 VCFS subjects - NOT used in training)
 
 # Subject-aware stratified split for 7T data
 train_path_7T, _, subjects_prob_7T, _ = create_train_test_split(
@@ -52,7 +51,7 @@ train_path_7T, _, subjects_prob_7T, _ = create_train_test_split(
     ],
     output_dir='/home/althause/data/training_split',
     method='symlink',
-    test_ratio=0.3,
+    test_ratio=0.1,
     seed=42,
     prob_mode='sqrt',
     verbose=True,

@@ -147,6 +147,8 @@ for path_model in model_files:
     print(f"Target resolution: {target_res}")
     print(f"n_channels: {n_channels}")
     print("\nStarting prediction...\n")
+    print(f'path_images: {path_images}')
+    print(f'path_segm: {path_segm}')
 
     # Run prediction
     predict(path_images,
@@ -173,7 +175,7 @@ for path_model in model_files:
     print("\nPrediction complete!")
 
     # === DICE EVALUATION ===
-    path_subj = Path(path_images)
+    path_subj = Path(path_segm)
     for sub in sorted(path_subj.glob('*nii.gz')):
         name = sub.stem
         match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
@@ -261,9 +263,9 @@ if all_model_results:
         print(f"\nBest epoch: {best_epoch} (Dice: {epoch_summary['mean'].max():.4f})")
 
     print(f"\nFull results saved to: {summary_path}")
-
+    RERUN_TMP_PREDICTIONS = False
     # Re-run prediction for best model and keep outputs
-    if DELETE_TMP_PREDICTIONS:
+    if DELETE_TMP_PREDICTIONS or RERUN_TMP_PREDICTIONS:
         if model_dice_scores:
             best_model_path = max(model_dice_scores, key=model_dice_scores.get)
             best_model = os.path.basename(best_model_path)

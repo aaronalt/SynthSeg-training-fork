@@ -173,7 +173,7 @@ for path_model in model_files:
     print("\nPrediction complete!")
 
     # === DICE EVALUATION ===
-    path_subj = Path(path_segm)
+    path_subj = Path(path_images)
     for sub in sorted(path_subj.glob('*nii.gz')):
         name = sub.stem
         match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)

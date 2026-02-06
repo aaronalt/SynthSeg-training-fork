@@ -12,6 +12,8 @@ from SynthSeg.predict import predict
 import numpy as np
 from glob import glob
 import json
+import datetime
+import re
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete predictions after evaluation (saves disk space)
@@ -59,13 +61,13 @@ for path_model in model_files:
     gt_folder = None  # '/home/aaron/nas2/DATA_inProgress/Aaron/7T/Nifti/derivatives/claustrum_manual_labels/validation'
 
     # Extract model params
-    json_params = os.join(model_dir, 'training_params.json')
+    json_params = os.path.join(model_dir, 'training_params.json')
     with open(json_params, "r") as jsonfile:
         trained_model_params = json.load(jsonfile)
 
     # Model and labels
-    path_segmentation_labels = trained_model_params['segmentation_labels']
-    path_topology_classes = trained_model_params['generation_classes']
+    path_segmentation_labels = trained_model_params.get('segmentation_labels')
+    path_topology_classes = trained_model_params.get('generation_classes')
 
     # Create output directories
     os.makedirs(path_segm, exist_ok=True)
@@ -73,21 +75,21 @@ for path_model in model_files:
     os.makedirs(path_resampled, exist_ok=True)
 
     # Parameters (must match training!)
-    n_neutral_labels = trained_model_params['n_neutral_labels']
-    cropping = trained_model_params['cropping']
-    target_res =  trained_model_params['target_res']
+    n_neutral_labels = trained_model_params.get('n_neutral_labels')
+    cropping = trained_model_params.get('cropping')
+    target_res =  trained_model_params.get('target_res')
     flip = True
     sigma_smoothing = 0.5
     keep_biggest_component = False
 
     # Architecture (must match training!)
-    n_levels = trained_model_params['n_levels']
-    nb_conv_per_level = trained_model_params['nb_conv_per_level']
-    conv_size = trained_model_params['conv_size']
-    unet_feat_count = trained_model_params['unet_feat_count']
-    activation = trained_model_params['activation']
-    feat_multiplier = trained_model_params['feat_multiplier']
-    n_channels = trained_model_params['n_channels']
+    n_levels = trained_model_params.get('n_levels')
+    nb_conv_per_level = trained_model_params.get('nb_conv_per_level')
+    conv_size = trained_model_params.get('conv_size')
+    unet_feat_count = trained_model_params.get('unet_feat_count')
+    activation = trained_model_params.get('activation')
+    feat_multiplier = trained_model_params.get('feat_multiplier')
+    n_channels = trained_model_params.get('n_channels')
 
     compute_distances = True
 

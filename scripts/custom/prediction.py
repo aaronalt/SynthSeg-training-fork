@@ -104,7 +104,7 @@ for path_model in model_files:
         path_images = '/home/althause/data/training_split/test'
         active_gt_dirs = gt_dirs['7T']
     elif FIELD_STRENGTH == '3T':
-        path_images = '/home/althause/data/claustrum_gt/3T/T1_VCFS/'
+        path_images = '/home/althause/data/training_split_3T/test'
         active_gt_dirs = gt_dirs['3T']
     else:  # 'both'
         path_images = '/home/althause/data/training_split/test_all'  # combined
@@ -193,11 +193,11 @@ for path_model in model_files:
         elif 't1w' in name.lower():
             modality = 't1w'
 
-    gt = find_ground_truth(subject_id, hemisphere, modality)
-    group = FIELD_STRENGTH
+        gt = find_ground_truth(subject_id, hemisphere, modality)
+        group = FIELD_STRENGTH
 
-    if gt:
-            # print(f"Found {field_strength} GT match for {subject_id} {hemisphere}: {gt.name}")
+        if gt:
+            print(f"Found {group} GT match for {subject_id} {hemisphere}: {gt.name}")
 
             results = evaluate.evaluate(
                 sub,

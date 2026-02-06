@@ -38,7 +38,7 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/<experiment>'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260205_095904'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')

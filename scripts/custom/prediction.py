@@ -46,45 +46,45 @@ model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_202602
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
 
 # Ground truth directories for evaluation
-gt_dirs = [
-    Path('/home/althause/data/claustrum_gt/7T/T1_CONTROL'),
-    Path('/home/althause/data/claustrum_gt/7T/T2'),
-]
+gt_dirs = {
+    '7T': [
+        Path('/home/althause/data/claustrum_gt/7T/T1_CONTROL'),
+        Path('/home/althause/data/claustrum_gt/7T/T2'),
+    ],
+    '3T': [
+        Path('/home/althause/data/claustrum_gt/3T/T1_CONTROL'),
+        Path('/home/althause/data/claustrum_gt/3T/T1_VCFS'),
+    ],
+}
+
 
 def find_ground_truth(subject_id, hemisphere, modality=None):
     """
     Find the ground truth claustrum label for a given subject and hemisphere.
 
-    Args:
-        subject_id: Subject ID (e.g., '6608')
-        hemisphere: 'lh' or 'rh'
-        modality: Optional modality hint ('t1w', 't2w-cor', 't2w-tra')
-
     Returns:
-        Path to ground truth file, or None if not found
+        (Path to ground truth file, field_strength) or (None, None)
     """
-    # Build search patterns
     patterns = [
         f'*{subject_id}*{hemisphere}*.nii.gz',
         f'*{subject_id}*_{hemisphere}_*.nii.gz',
         f'sub-{subject_id}*{hemisphere}*.nii.gz',
     ]
 
-    for gt_dir in gt_dirs:
-        if not gt_dir.exists():
-            continue
-        for pattern in patterns:
-            matches = list(gt_dir.glob(pattern))
-            if matches:
-                # If modality specified, try to match it
-                if modality:
-                    for m in matches:
-                        if modality in m.name.lower():
-                            return m
-                # Otherwise return first match
-                return matches[0]
+    for field_strength, dirs in gt_dirs.items():
+        for gt_dir in dirs:
+            if not gt_dir.exists():
+                continue
+            for pattern in patterns:
+                matches = list(gt_dir.glob(pattern))
+                if matches:
+                    if modality:
+                        for m in matches:
+                            if modality in m.name.lower():
+                                return m, field_strength
+                    return matches[0], field_strength
 
-    return None
+    return None, None
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')
 def get_epoch(f):
@@ -191,12 +191,10 @@ for path_model in model_files:
         elif 't1w' in name.lower():
             modality = 't1w'
 
-        # Find matching ground truth
-        gt = find_ground_truth(subject_id, hemisphere, modality)
-        group = '7T'
+        gt, field_strength = find_ground_truth(subject_id, hemisphere, modality)
 
         if gt:
-            print(f"Found GT match for {subject_id} {hemisphere}: {gt.name}")
+            print(f"Found {field_strength} GT match for {subject_id} {hemisphere}: {gt.name}")
 
             results = evaluate.evaluate(
                 sub,
@@ -206,7 +204,7 @@ for path_model in model_files:
                 save_resampled=False,
                 save_output=True,
                 output_dir=path_subj,
-                group=group,
+                group=field_strength, # Now uses 7T or 3T
                 model=path_model,
                 prediction_path=path_segm
             )

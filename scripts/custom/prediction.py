@@ -66,8 +66,8 @@ for path_model in model_files:
         trained_model_params = json.load(jsonfile)
 
     # Model and labels
-    path_segmentation_labels = trained_model_params.get('segmentation_labels')
-    path_topology_classes = trained_model_params.get('generation_classes')
+    path_segmentation_labels = np.array(trained_model_params.get('segmentation_labels'))
+    path_topology_classes = np.array(trained_model_params.get('generation_classes'))
 
     # Create output directories
     os.makedirs(path_segm, exist_ok=True)

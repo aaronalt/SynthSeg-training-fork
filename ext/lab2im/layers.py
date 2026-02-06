@@ -1321,7 +1321,7 @@ class DiceLoss(Layer):
 
         # build tensor with class weights
         if self.class_weights is not None:
-            if self.class_weights == -1:
+            if np.isscalar(self.class_weights) and self.class_weights == -1:
                 self.dynamic_weighting = True
             else:
                 class_weights_tens = utils.reformat_to_list(self.class_weights, n_labels)
@@ -1475,7 +1475,7 @@ class CrossEntropyLoss(Layer):
 
         # build tensor with class weights
         if self.class_weights is not None:
-            if self.class_weights == -1:
+            if np.isscalar(self.class_weights) and self.class_weights == -1:
                 self.dynamic_weighting = True
             else:
                 class_weights_tens = utils.reformat_to_list(self.class_weights, n_labels)
@@ -1573,7 +1573,7 @@ class MomentLoss(Layer):
 
         # build tensor with class weights
         if self.class_weights is not None:
-            if self.class_weights == -1:
+            if np.isscalar(self.class_weights) and self.class_weights == -1:
                 self.dynamic_weighting = True
             else:
                 class_weights_tens = utils.reformat_to_list(self.class_weights, n_labels)

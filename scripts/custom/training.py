@@ -116,9 +116,9 @@ feat_multiplier = 2
 
 # Training parameters
 lr = 1e-4
-wl2_epochs = 0  # Skip warmup - using pretrained weights
+wl2_epochs = 2  # Skip warmup - using pretrained weights
 dice_epochs = 100  # Train longer to learn small structures
-steps_per_epoch = 1000
+steps_per_epoch = 5000
 validation_steps = 200  # More steps for stable validation with small 3T set
 
 # Generation and segmentation labels

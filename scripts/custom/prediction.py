@@ -21,7 +21,7 @@ from pathlib import Path
 import compare_dice_batch as evaluate
 
 # === OPTIONS ===
-DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
+DELETE_TMP_PREDICTIONS = False  # Set to True to delete segmentations after evaluation (keeps CSVs)
 FIELD_STRENGTH = '3T'
 
 # Store results across all models for summary
@@ -263,42 +263,43 @@ if all_model_results:
     print(f"\nFull results saved to: {summary_path}")
 
     # Re-run prediction for best model and keep outputs
-    if model_dice_scores:
-        best_model_path = max(model_dice_scores, key=model_dice_scores.get)
-        best_model = os.path.basename(best_model_path)
-        print(f"\n{'='*60}")
-        print(f"Re-running prediction for BEST model: {best_model}")
-        print(f"{'='*60}\n")
+    if DELETE_TMP_PREDICTIONS:
+        if model_dice_scores:
+            best_model_path = max(model_dice_scores, key=model_dice_scores.get)
+            best_model = os.path.basename(best_model_path)
+            print(f"\n{'='*60}")
+            print(f"Re-running prediction for BEST model: {best_model}")
+            print(f"{'='*60}\n")
 
-        # Final prediction paths (these will be kept)
-        path_segm_final = f'/home/althause/data/seg/{exp}/BEST_{best_model.replace(".h5", "")}'
-        path_posteriors_final = os.path.join(path_segm_final, 'posteriors')
-        path_resampled_final = os.path.join(path_segm_final, 'resampled')
-        path_vol_final = os.path.join(path_segm_final, 'volumes.csv')
+            # Final prediction paths (these will be kept)
+            path_segm_final = f'/home/althause/data/seg/{exp}/BEST_{best_model.replace(".h5", "")}'
+            path_posteriors_final = os.path.join(path_segm_final, 'posteriors')
+            path_resampled_final = os.path.join(path_segm_final, 'resampled')
+            path_vol_final = os.path.join(path_segm_final, 'volumes.csv')
 
-        os.makedirs(path_segm_final, exist_ok=True)
-        os.makedirs(path_posteriors_final, exist_ok=True)
-        os.makedirs(path_resampled_final, exist_ok=True)
+            os.makedirs(path_segm_final, exist_ok=True)
+            os.makedirs(path_posteriors_final, exist_ok=True)
+            os.makedirs(path_resampled_final, exist_ok=True)
 
-        predict(path_images,
-                path_segm_final,
-                best_model_path,
-                path_segmentation_labels,
-                n_neutral_labels=n_neutral_labels,
-                path_posteriors=path_posteriors_final,
-                path_resampled=path_resampled_final,
-                path_volumes=path_vol_final,
-                cropping=cropping,
-                target_res=target_res,
-                flip=flip,
-                topology_classes=path_topology_classes,
-                sigma_smoothing=sigma_smoothing,
-                keep_biggest_component=keep_biggest_component,
-                n_levels=n_levels,
-                nb_conv_per_level=nb_conv_per_level,
-                conv_size=conv_size,
-                unet_feat_count=unet_feat_count,
-                feat_multiplier=feat_multiplier,
-                activation=activation)
+            predict(path_images,
+                    path_segm_final,
+                    best_model_path,
+                    path_segmentation_labels,
+                    n_neutral_labels=n_neutral_labels,
+                    path_posteriors=path_posteriors_final,
+                    path_resampled=path_resampled_final,
+                    path_volumes=path_vol_final,
+                    cropping=cropping,
+                    target_res=target_res,
+                    flip=flip,
+                    topology_classes=path_topology_classes,
+                    sigma_smoothing=sigma_smoothing,
+                    keep_biggest_component=keep_biggest_component,
+                    n_levels=n_levels,
+                    nb_conv_per_level=nb_conv_per_level,
+                    conv_size=conv_size,
+                    unet_feat_count=unet_feat_count,
+                    feat_multiplier=feat_multiplier,
+                    activation=activation)
 
-        print(f"\nBest model predictions saved to: {path_segm_final}")
+            print(f"\nBest model predictions saved to: {path_segm_final}")

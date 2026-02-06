@@ -14,7 +14,7 @@ from glob import glob
 import json
 
 # === OPTIONS ===
-DELETE_TMP_PREDICTIONS = False  # Set to True to delete predictions after evaluation (saves disk space)
+DELETE_TMP_PREDICTIONS = True  # Set to True to delete predictions after evaluation (saves disk space)
 
 # Store results across all models for summary
 all_model_results = []

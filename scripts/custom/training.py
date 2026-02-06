@@ -130,6 +130,19 @@ n_neutral_labels = 5
 # Keep all labels distinct - no collapsing to background
 path_segmentation_labels = path_generation_labels.copy()
 
+# === LABEL WEIGHTS FOR DICE LOSS ===
+# Higher weight = more importance during training
+# Claustrum labels (138=LH, 139=RH) weighted more heavily
+label_weights = np.ones(len(path_segmentation_labels))
+claustrum_weight = 5.0  # Weight claustrum 5x more than other structures
+
+# Find claustrum indices
+lh_claustrum_idx = np.where(path_segmentation_labels == 138)[0][0]
+rh_claustrum_idx = np.where(path_segmentation_labels == 139)[0][0]
+label_weights[lh_claustrum_idx] = claustrum_weight
+label_weights[rh_claustrum_idx] = claustrum_weight
+print(f"Claustrum weight: {claustrum_weight}x at indices {lh_claustrum_idx} (LH=138), {rh_claustrum_idx} (RH=139)")
+
 # Shape and resolution
 target_res = 1.0
 output_shape = 160  # All training labels resampled to 160³ @ 1mm
@@ -208,5 +221,6 @@ training(all_train_paths,
          data_res=data_res,
          thickness=thickness,
          prior_means=means,
-         prior_stds=stds
+         prior_stds=stds,
+         label_weights=label_weights
          )

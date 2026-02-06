@@ -24,7 +24,7 @@ from keras.models import Model
 from ext.lab2im import layers
 
 
-def metrics_model(input_model, label_list, metrics='dice'):
+def metrics_model(input_model, label_list, metrics='dice', class_weights=None):
 
     # get prediction
     last_tensor = input_model.outputs[0]
@@ -46,7 +46,7 @@ def metrics_model(input_model, label_list, metrics='dice'):
     labels_gt._keras_shape = tuple(labels_gt.get_shape().as_list())
 
     if metrics == 'dice':
-        last_tensor = layers.DiceLoss()([labels_gt, last_tensor])
+        last_tensor = layers.DiceLoss(class_weights=class_weights)([labels_gt, last_tensor])
 
     elif metrics == 'wl2':
         last_tensor = layers.WeightedL2Loss(target_value=5)([labels_gt, last_tensor])

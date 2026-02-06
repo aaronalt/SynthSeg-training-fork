@@ -22,6 +22,7 @@ import compare_dice_batch as evaluate
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
+FIELD_STRENGTH = 'both'
 
 # Store results across all models for summary
 all_model_results = []
@@ -59,32 +60,24 @@ gt_dirs = {
 
 
 def find_ground_truth(subject_id, hemisphere, modality=None):
-    """
-    Find the ground truth claustrum label for a given subject and hemisphere.
-
-    Returns:
-        (Path to ground truth file, field_strength) or (None, None)
-    """
     patterns = [
         f'*{subject_id}*{hemisphere}*.nii.gz',
         f'*{subject_id}*_{hemisphere}_*.nii.gz',
         f'sub-{subject_id}*{hemisphere}*.nii.gz',
     ]
 
-    for field_strength, dirs in gt_dirs.items():
-        for gt_dir in dirs:
-            if not gt_dir.exists():
-                continue
-            for pattern in patterns:
-                matches = list(gt_dir.glob(pattern))
-                if matches:
-                    if modality:
-                        for m in matches:
-                            if modality in m.name.lower():
-                                return m, field_strength
-                    return matches[0], field_strength
-
-    return None, None
+    for gt_dir in active_gt_dirs:
+        if not gt_dir.exists():
+            continue
+        for pattern in patterns:
+            matches = list(gt_dir.glob(pattern))
+            if matches:
+                if modality:
+                    for m in matches:
+                        if modality in m.name.lower():
+                            return m
+                return matches[0]
+    return None
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')
 def get_epoch(f):
@@ -106,8 +99,16 @@ for path_model in model_files:
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
     path_vol = os.path.join(path_segm, 'volumes.csv')
-
-    # Extract model params
+    if FIELD_STRENGTH == '7T':
+        path_images = '/home/althause/data/training_split/test'
+        active_gt_dirs = gt_dirs['7T']
+    elif FIELD_STRENGTH == '3T':
+        path_images = '/home/althause/data/claustrum_gt/3T/T1_VCFS/'
+        active_gt_dirs = gt_dirs['3T']
+    else:  # 'both'
+        path_images = '/home/althause/data/training_split/test_all'  # combined
+        active_gt_dirs = gt_dirs['7T'] + gt_dirs['3T']
+        # Extract model params
     json_params = os.path.join(model_dir, 'training_params.json')
     with open(json_params, "r") as jsonfile:
         trained_model_params = json.load(jsonfile)
@@ -191,9 +192,10 @@ for path_model in model_files:
         elif 't1w' in name.lower():
             modality = 't1w'
 
-        gt, field_strength = find_ground_truth(subject_id, hemisphere, modality)
+    gt = find_ground_truth(subject_id, hemisphere, modality)
+    group = FIELD_STRENGTH
 
-        if gt:
+    if gt:
             print(f"Found {field_strength} GT match for {subject_id} {hemisphere}: {gt.name}")
 
             results = evaluate.evaluate(
@@ -204,7 +206,7 @@ for path_model in model_files:
                 save_resampled=False,
                 save_output=True,
                 output_dir=path_subj,
-                group=field_strength, # Now uses 7T or 3T
+                group=group,
                 model=path_model,
                 prediction_path=path_segm
             )

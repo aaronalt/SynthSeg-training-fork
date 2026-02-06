@@ -14,6 +14,7 @@ from glob import glob
 import json
 import datetime
 import re
+import shutil
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete predictions after evaluation (saves disk space)
@@ -53,8 +54,10 @@ print(f"Models: {[os.path.basename(f) for f in model_files]}")
 
 for path_model in model_files:
     # Paths
+    exp = model_dir.split('/')[-1]
+    model_name = os.path.basename(path_model).replace('.h5', '')
     path_images = '/home/althause/data/training_split/test'
-    path_segm = f'/home/althause/data/seg/pred_{path_model}_{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
+    path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
     path_vol = os.path.join(path_segm, 'volumes.csv')
@@ -126,3 +129,8 @@ for path_model in model_files:
             compute_distances=compute_distances)
 
     print("\nPrediction complete!")
+
+    # Clean up temporary outputs
+    if DELETE_TMP_PREDICTIONS and os.path.exists(path_segm):
+        shutil.rmtree(path_segm)
+        print(f"Cleaned up: {path_segm}")

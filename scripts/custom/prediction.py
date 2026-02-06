@@ -197,7 +197,7 @@ for path_model in model_files:
     group = FIELD_STRENGTH
 
     if gt:
-            print(f"Found {field_strength} GT match for {subject_id} {hemisphere}: {gt.name}")
+            # print(f"Found {field_strength} GT match for {subject_id} {hemisphere}: {gt.name}")
 
             results = evaluate.evaluate(
                 sub,

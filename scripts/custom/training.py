@@ -61,36 +61,44 @@ train_path_7T, _, subjects_prob_7T, _ = create_train_test_split(
 trainval_files_3T = lab2im_utils.list_images_in_folder(trainval_3T_dir)
 print(f"3T data: {len(trainval_files_3T)} files for training AND validation")
 
-# Create combined training directory (7T + 3T)
+# Create combined training directory (7T + 3T) - reuse if exists to avoid breaking concurrent training
 combined_train_dir = '/home/althause/data/training_split/train_combined'
-if os.path.exists(combined_train_dir):
-    shutil.rmtree(combined_train_dir)
-os.makedirs(combined_train_dir)
+if not os.path.exists(combined_train_dir) or len(os.listdir(combined_train_dir)) == 0:
+    if os.path.exists(combined_train_dir):
+        shutil.rmtree(combined_train_dir)
+    os.makedirs(combined_train_dir)
 
-# Add 7T training files
-for f in lab2im_utils.list_images_in_folder(train_path_7T):
-    dest = os.path.join(combined_train_dir, os.path.basename(f))
-    if not os.path.exists(dest):
-        os.symlink(f, dest)
+    # Add 7T training files
+    for f in lab2im_utils.list_images_in_folder(train_path_7T):
+        dest = os.path.join(combined_train_dir, os.path.basename(f))
+        if not os.path.exists(dest):
+            os.symlink(f, dest)
 
-# Add 3T files to training (with prefix to avoid name collision)
-for f in trainval_files_3T:
-    dest = os.path.join(combined_train_dir, '3T_' + os.path.basename(f))
-    if not os.path.exists(dest):
-        os.symlink(f, dest)
+    # Add 3T files to training (with prefix to avoid name collision)
+    for f in trainval_files_3T:
+        dest = os.path.join(combined_train_dir, '3T_' + os.path.basename(f))
+        if not os.path.exists(dest):
+            os.symlink(f, dest)
+    print("Created new training symlinks")
+else:
+    print("Reusing existing training directory (concurrent training safe)")
 
 n_train_files = len(os.listdir(combined_train_dir))
 print(f"Combined training: {n_train_files} files (7T + 3T)")
 
-# Create 3T validation directory (same files as in training - different synthetic images)
+# Create 3T validation directory - reuse if exists
 val_3T_dir = '/home/althause/data/training_split/val_3T'
-if os.path.exists(val_3T_dir):
-    shutil.rmtree(val_3T_dir)
-os.makedirs(val_3T_dir)
-for f in trainval_files_3T:
-    dest = os.path.join(val_3T_dir, os.path.basename(f))
-    if not os.path.exists(dest):
-        os.symlink(f, dest)
+if not os.path.exists(val_3T_dir) or len(os.listdir(val_3T_dir)) == 0:
+    if os.path.exists(val_3T_dir):
+        shutil.rmtree(val_3T_dir)
+    os.makedirs(val_3T_dir)
+    for f in trainval_files_3T:
+        dest = os.path.join(val_3T_dir, os.path.basename(f))
+        if not os.path.exists(dest):
+            os.symlink(f, dest)
+    print("Created new validation symlinks")
+else:
+    print("Reusing existing validation directory")
 
 all_train_paths = combined_train_dir
 all_val_paths = val_3T_dir

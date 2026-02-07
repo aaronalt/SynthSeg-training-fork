@@ -174,7 +174,7 @@ bias_field_std = 0.7
 
 # Acquisition resolution parameters
 randomise_res = False
-data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
+data_res = np.array([0.86, 1.1, 0.86])  # slice spacing
 thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
 
 path_mri = '/home/althause/data/intensity_estimation/images'

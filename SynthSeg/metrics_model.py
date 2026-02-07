@@ -46,7 +46,12 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None):
     labels_gt._keras_shape = tuple(labels_gt.get_shape().as_list())
 
     if metrics == 'dice':
-        last_tensor = layers.DiceLoss(class_weights=class_weights)([labels_gt, last_tensor])
+        last_tensor = layers.DiceLoss(
+            class_weights=class_weights,
+            boundary_weights=2,      # Extra weight for boundary voxels
+            boundary_dist=2,         # Within 2 voxels of boundary (smaller for thin structures)
+            skip_background=True     # Don't weight background boundaries (default)
+        )([labels_gt, last_tensor])
 
     elif metrics == 'wl2':
         last_tensor = layers.WeightedL2Loss(target_value=5)([labels_gt, last_tensor])

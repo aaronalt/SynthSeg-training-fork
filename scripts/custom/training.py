@@ -158,7 +158,7 @@ n_channels = 1
 
 # GMM sampling - maps each generation label to an intensity class
 # Max index must be < number of prior classes (19 classes = indices 0-18)
-prior_distributions = 'normal'
+prior_distributions = 'uniform'
 path_generation_classes = np.array([0, 1, 2, 3, 4,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
                                     5, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
@@ -173,9 +173,9 @@ nonlin_std = 4.0
 bias_field_std = 0.7
 
 # Acquisition resolution parameters
-randomise_res = False
-data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
-thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
+randomise_res = True
+# data_res = np.array([0.86, 1.1, 0.86])  # slice spacing i.e. resolution to mimic
+# thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
 
 path_mri = '/home/althause/data/intensity_estimation/images'
 path_training_labels = '/home/althause/data/intensity_estimation/labels'
@@ -226,9 +226,9 @@ training(all_train_paths,
          finetune=False,
          subjects_prob=None,  # Equal probability for combined training set
          val_subjects_prob=val_subjects_prob,
-         data_res=data_res,
-         thickness=thickness,
-         prior_means=means,
-         prior_stds=stds,
+         # data_res=data_res,
+         # thickness=thickness,
+         # prior_means=means,
+         # prior_stds=stds,
          label_weights=label_weights
          )

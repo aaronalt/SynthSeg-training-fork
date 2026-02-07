@@ -1364,14 +1364,16 @@ class DiceLoss(Layer):
         loss = 1 - dice
 
         # apply class weighting across labels. In this case loss will have shape (batch), otherwise (batch, n_labels).
+        weights_to_use = self.class_weights_tens
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
             if boundary_weights_tensor is not None:  # we account for the boundary weighting to compute volume
-                self.class_weights_tens = 1 / (tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes) + 1e-8)
+                weights_to_use = 1 / (tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes) + 1e-8)
             else:
-                self.class_weights_tens = 1 / (tf.reduce_sum(gt, self.spatial_axes) + 1e-8)
-        if self.class_weights_tens is not None:
-            self.class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
-            loss = tf.reduce_sum(loss * self.class_weights_tens, -1)
+                weights_to_use = 1 / (tf.reduce_sum(gt, self.spatial_axes) + 1e-8)
+        if weights_to_use is not None:
+            # Use local variable to avoid modifying class attribute (causes graph scope issues)
+            normalized_weights = weights_to_use / (tf.reduce_sum(weights_to_use, -1, keepdims=True) + 1e-8)
+            loss = tf.reduce_sum(loss * normalized_weights, -1)
 
         return tf.math.reduce_mean(loss)
 
@@ -1511,14 +1513,15 @@ class CrossEntropyLoss(Layer):
             boundary_weights_tensor = None
 
         # apply class weighting across labels. By the end of this, ce still has the same shape has the input tensors.
+        weights_to_use = self.class_weights_tens
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
             if boundary_weights_tensor is not None:  # we account for the boundary weighting to compute volume
-                self.class_weights_tens = 1 / tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes, True)
+                weights_to_use = 1 / tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes, True)
             else:
-                self.class_weights_tens = 1 / tf.reduce_sum(gt, self.spatial_axes)
-        if self.class_weights_tens is not None:
-            self.class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
-            ce = tf.reduce_sum(ce * self.class_weights_tens, -1)
+                weights_to_use = 1 / tf.reduce_sum(gt, self.spatial_axes)
+        if weights_to_use is not None:
+            normalized_weights = weights_to_use / (tf.reduce_sum(weights_to_use, -1, keepdims=True) + 1e-8)
+            ce = tf.reduce_sum(ce * normalized_weights, -1)
 
         # sum along label axis, and take the mean along spatial dimensions
         ce = tf.math.reduce_mean(tf.math.reduce_sum(ce, axis=-1))
@@ -1598,11 +1601,12 @@ class MomentLoss(Layer):
         loss = tf.math.sqrt(tf.reduce_sum(tf.square(pred_mean_coordinates - gt_mean_coordinates), axis=1))  # (B, nchan)
 
         # apply class weighting across labels. In this case loss will have shape (batch), otherwise (batch, n_labels).
+        weights_to_use = self.class_weights_tens
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
-            self.class_weights_tens = 1 / tf.reduce_sum(gt, self.spatial_axes)
-        if self.class_weights_tens is not None:
-            self.class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
-            loss = tf.reduce_sum(loss * self.class_weights_tens, -1)
+            weights_to_use = 1 / tf.reduce_sum(gt, self.spatial_axes)
+        if weights_to_use is not None:
+            normalized_weights = weights_to_use / (tf.reduce_sum(weights_to_use, -1, keepdims=True) + 1e-8)
+            loss = tf.reduce_sum(loss * normalized_weights, -1)
 
         return tf.math.reduce_mean(loss)
 

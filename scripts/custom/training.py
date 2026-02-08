@@ -87,31 +87,19 @@ for f in sorted(source_3T_dir.glob('*.nii.gz')):
         n_included += 1
 print(f"3T filtered: {n_included} train files, {n_excluded} val files excluded")
 
-# Step 3: Split 7T only for train/val
-train_path_7T, _, _, _ = create_train_test_split(
-    base_dirs_with_subdirs=[
-        {
-            'base_dir': '/home/althause/data/7T/training_labels_native',
-            'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
-            'field_strength': '7T',
-        },
-    ],
-    output_dir=split_dir_main,
-    method='symlink',
-    test_ratio=0.2,
-    seed=42,
-    prob_mode='sqrt',
-    verbose=True,
-)
-
-# Step 4: Combine 7T train + 10% 3T train into one training directory
+# Step 3: Combine all 7T + 10% 3T train into one training directory
 combined_train_dir = os.path.join(split_dir_main, 'train_combined')
 os.makedirs(combined_train_dir, exist_ok=True)
 
-for f in lab2im_utils.list_images_in_folder(str(train_path_7T)):
-    dest = os.path.join(combined_train_dir, os.path.basename(f))
-    if not os.path.exists(dest):
-        os.symlink(os.path.realpath(f), dest)
+# Add all 7T files (no holdout — only testing on 3T)
+for subdir in ['t1w', 't2w-cor', 't2w-tra']:
+    subdir_path = Path(f'/home/althause/data/7T/training_labels_native/{subdir}')
+    if not subdir_path.exists():
+        continue
+    for f in sorted(subdir_path.glob('*.nii.gz')):
+        dest = os.path.join(combined_train_dir, f'7T_{subdir}_{f.name}')
+        if not os.path.exists(dest):
+            os.symlink(f.resolve(), dest)
 
 for f in sorted(filtered_3T_dir.glob('*.nii.gz')):
     dest = os.path.join(combined_train_dir, f'3T_{f.name}')

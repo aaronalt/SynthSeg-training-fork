@@ -146,7 +146,7 @@ path_segmentation_labels = path_generation_labels.copy()
 # Higher weight = more importance during training
 # Claustrum labels (138=LH, 139=RH) weighted more heavily
 label_weights = np.ones(len(path_segmentation_labels))
-claustrum_weight = 5.0  # Weight claustrum 5x more than other structures
+claustrum_weight = 10.0
 
 # Find claustrum indices
 lh_claustrum_idx = np.where(path_segmentation_labels == 138)[0][0]

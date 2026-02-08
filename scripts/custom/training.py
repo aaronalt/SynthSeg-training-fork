@@ -40,6 +40,11 @@ os.makedirs(log_dir, exist_ok=True)
 import shutil
 from ext.lab2im import utils as lab2im_utils
 
+# Per-experiment split directories to avoid conflicts between concurrent runs
+split_dir_3T = f'/home/althause/data/training_split_3T/{experiment_name}'
+split_dir_main = f'/home/althause/data/training_split/{experiment_name}'
+filtered_3T_base = Path(f'/home/althause/data/3T/training_labels_native_filtered/{experiment_name}')
+
 # Step 1: Split 3T data — 20% for training, 80% for validation
 train_path_3T, val_path_3T, _, val_probs_3T = create_train_test_split(
     base_dirs_with_subdirs=[
@@ -49,7 +54,7 @@ train_path_3T, val_path_3T, _, val_probs_3T = create_train_test_split(
             'field_strength': '3T',
         },
     ],
-    output_dir='/home/althause/data/training_split_3T',
+    output_dir=split_dir_3T,
     method='symlink',
     test_ratio=0.8,
     seed=42,
@@ -58,14 +63,13 @@ train_path_3T, val_path_3T, _, val_probs_3T = create_train_test_split(
 )
 
 # Get 3T validation subject IDs to exclude from main training split
-with open('/home/althause/data/training_split_3T/split_info.json') as f:
+with open(os.path.join(split_dir_3T, 'split_info.json')) as f:
     split_info_3T = json.load(f)
 val_subjects_3T = set(split_info_3T['test_subjects'])
 print(f"3T validation subjects (excluded from training): {val_subjects_3T}")
 print(f"3T validation set: {val_path_3T}")
 
 # Step 2: Create filtered 3T directory excluding validation subjects
-filtered_3T_base = Path('/home/althause/data/3T/training_labels_native_filtered')
 filtered_3T_dir = filtered_3T_base / 't1w'
 if filtered_3T_base.exists():
     shutil.rmtree(filtered_3T_base)
@@ -97,7 +101,7 @@ train_path, val_path_7T, train_probs, _ = create_train_test_split(
             'field_strength': '3T',
         },
     ],
-    output_dir='/home/althause/data/training_split',
+    output_dir=split_dir_main,
     method='symlink',
     test_ratio=0.2,
     seed=42,

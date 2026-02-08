@@ -104,7 +104,7 @@ for path_model in model_files:
         path_images = '/home/althause/data/training_split/test'
         active_gt_dirs = gt_dirs['7T']
     elif FIELD_STRENGTH == '3T':
-        path_images = '/home/althause/data/training_split_3T/test'
+        path_images = '/home/althause/data/3T/training_labels_native/test'
         active_gt_dirs = gt_dirs['3T']
     else:  # 'both'
         path_images = '/home/althause/data/training_split/test_all'  # combined

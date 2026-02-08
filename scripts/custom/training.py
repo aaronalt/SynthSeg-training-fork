@@ -45,7 +45,7 @@ split_dir_3T = f'/home/althause/data/training_split_3T/{experiment_name}'
 split_dir_main = f'/home/althause/data/training_split/{experiment_name}'
 filtered_3T_base = Path(f'/home/althause/data/3T/training_labels_native_filtered/{experiment_name}')
 
-# Step 1: Split 3T data — 20% for training, 80% for validation
+# Step 1: Split 3T data — 10% for training, 90% for validation
 train_path_3T, val_path_3T, _, val_probs_3T = create_train_test_split(
     base_dirs_with_subdirs=[
         {
@@ -56,7 +56,7 @@ train_path_3T, val_path_3T, _, val_probs_3T = create_train_test_split(
     ],
     output_dir=split_dir_3T,
     method='symlink',
-    test_ratio=0.8,
+    test_ratio=0.9,
     seed=42,
     prob_mode='uniform',
     verbose=True,
@@ -87,18 +87,13 @@ for f in sorted(source_3T_dir.glob('*.nii.gz')):
         n_included += 1
 print(f"3T filtered: {n_included} train files, {n_excluded} val files excluded")
 
-# Step 3: Main train/val split using 7T + filtered 3T (val subjects excluded)
-train_path, val_path_7T, train_probs, _ = create_train_test_split(
+# Step 3: Split 7T only for train/val
+train_path_7T, _, _, _ = create_train_test_split(
     base_dirs_with_subdirs=[
         {
             'base_dir': '/home/althause/data/7T/training_labels_native',
             'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
             'field_strength': '7T',
-        },
-        {
-            'base_dir': str(filtered_3T_base),
-            'subdirs': ['t1w'],
-            'field_strength': '3T',
         },
     ],
     output_dir=split_dir_main,
@@ -109,8 +104,25 @@ train_path, val_path_7T, train_probs, _ = create_train_test_split(
     verbose=True,
 )
 
-all_train_paths = train_path
-all_val_paths = val_path_3T  # Validate on held-out 3T subjects
+# Step 4: Combine 7T train + 10% 3T train into one training directory
+combined_train_dir = os.path.join(split_dir_main, 'train_combined')
+os.makedirs(combined_train_dir, exist_ok=True)
+
+for f in lab2im_utils.list_images_in_folder(str(train_path_7T)):
+    dest = os.path.join(combined_train_dir, os.path.basename(f))
+    if not os.path.exists(dest):
+        os.symlink(os.path.realpath(f), dest)
+
+for f in sorted(filtered_3T_dir.glob('*.nii.gz')):
+    dest = os.path.join(combined_train_dir, f'3T_{f.name}')
+    if not os.path.exists(dest):
+        os.symlink(f.resolve(), str(dest))
+
+n_combined = len(os.listdir(combined_train_dir))
+print(f"Combined training: {n_combined} files (7T train + 10% 3T train subjects)")
+
+all_train_paths = combined_train_dir
+all_val_paths = val_path_3T  # Validate on 90% held-out 3T subjects
 val_subjects_prob = val_probs_3T
 
 # Pre-trained model

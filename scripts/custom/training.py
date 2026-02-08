@@ -37,7 +37,7 @@ os.makedirs(log_dir, exist_ok=True)
 import shutil
 from ext.lab2im import utils as lab2im_utils
 
-# 3T training/validation files (4 non-VCFS subjects - used for BOTH training and validation)
+# 3T training/validation files
 trainval_3T_dir = '/home/althause/data/3T/training_labels_1mm_160/t1w'  # 1mm isotropic, 160³
 
 # Subject-aware stratified split for 7T data
@@ -173,9 +173,11 @@ nonlin_std = 4.0
 bias_field_std = 0.7
 
 # Acquisition resolution parameters
-randomise_res = False
-data_res = np.array([0.86, 1.1, 0.86])  # slice spacing
-thickness = np.array([0.86, 1.1, 0.86])  # slice thickness
+randomise_res = True
+max_res_iso = 1.5
+max_res_aniso = 2.0
+data_res = None
+thickness = None
 
 path_mri = '/home/althause/data/intensity_estimation/images'
 path_training_labels = '/home/althause/data/intensity_estimation/labels'
@@ -228,6 +230,8 @@ training(all_train_paths,
          val_subjects_prob=val_subjects_prob,
          data_res=data_res,
          thickness=thickness,
+         max_res_iso=max_res_iso,
+         max_res_aniso=max_res_aniso,
          prior_means=means,
          prior_stds=stds,
          label_weights=label_weights

@@ -17,9 +17,59 @@ License.
 # python imports
 import numpy as np
 import numpy.random as npr
+from scipy.ndimage import zoom
 
 # third-party imports
 from ext.lab2im import utils
+
+
+def resample_and_pad_label_map(lab, aff, target_res, target_shape):
+    """Resample a label map to target_res and pad/crop to target_shape.
+    Uses nearest-neighbor interpolation to preserve label integrity.
+    :param lab: 3D numpy array of labels
+    :param aff: 4x4 affine matrix of the label map
+    :param target_res: target isotropic or anisotropic resolution (scalar or array)
+    :param target_shape: target output shape (tuple of 3 ints)
+    :return: resampled and padded label map
+    """
+    # Get current voxel sizes from affine
+    voxel_sizes = np.sqrt(np.sum(aff[:3, :3] ** 2, axis=0))
+
+    # Compute zoom factors
+    target_res_arr = np.broadcast_to(np.atleast_1d(target_res).astype('float'), (3,))
+    zoom_factors = voxel_sizes / target_res_arr
+
+    # Resample using nearest neighbor
+    if not np.allclose(zoom_factors, 1.0, atol=0.01):
+        lab = zoom(lab, zoom_factors, order=0, mode='nearest')
+
+    # Pad or crop to target shape
+    current_shape = lab.shape
+    output = np.zeros(target_shape, dtype=lab.dtype)
+
+    starts_out = []
+    ends_out = []
+    starts_src = []
+    ends_src = []
+
+    for i in range(3):
+        if current_shape[i] >= target_shape[i]:
+            offset = (current_shape[i] - target_shape[i]) // 2
+            starts_src.append(offset)
+            ends_src.append(offset + target_shape[i])
+            starts_out.append(0)
+            ends_out.append(target_shape[i])
+        else:
+            offset = (target_shape[i] - current_shape[i]) // 2
+            starts_out.append(offset)
+            ends_out.append(offset + current_shape[i])
+            starts_src.append(0)
+            ends_src.append(current_shape[i])
+
+    output[starts_out[0]:ends_out[0], starts_out[1]:ends_out[1], starts_out[2]:ends_out[2]] = \
+        lab[starts_src[0]:ends_src[0], starts_src[1]:ends_src[1], starts_src[2]:ends_src[2]]
+
+    return output
 
 
 def build_model_inputs(path_label_maps,
@@ -32,7 +82,9 @@ def build_model_inputs(path_label_maps,
                        prior_means=None,
                        prior_stds=None,
                        use_specific_stats_for_channel=False,
-                       mix_prior_and_random=False):
+                       mix_prior_and_random=False,
+                       target_res=None,
+                       target_shape=None):
     """
     This function builds a generator that will be used to give the necessary inputs to the label_to_image model: the
     input label maps, as well as the means and stds defining the parameters of the GMM (which change at each minibatch).
@@ -96,7 +148,12 @@ def build_model_inputs(path_label_maps,
         for idx in indices:
 
             # load input label map
-            lab = utils.load_volume(path_label_maps[idx], dtype='int', aff_ref=np.eye(4))
+            if target_shape is not None and target_res is not None:
+                # Load without aff_ref to get original voxel sizes for resampling
+                lab, orig_aff = utils.load_volume(path_label_maps[idx], dtype='int', im_only=False)[:2]
+                lab = resample_and_pad_label_map(lab, orig_aff, target_res, target_shape)
+            else:
+                lab = utils.load_volume(path_label_maps[idx], dtype='int', aff_ref=np.eye(4))
             if (npr.uniform() > 0.7) & ('seg_cerebral' in path_label_maps[idx]):
                 lab[lab == 24] = 0
 

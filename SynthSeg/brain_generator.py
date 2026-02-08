@@ -204,8 +204,24 @@ class BrainGenerator:
             self.subjects_prob = None
 
         # generation parameters
-        self.labels_shape, self.aff, self.n_dims, _, self.header, self.atlas_res = \
+        _, self.aff, self.n_dims, _, self.header, self.atlas_res = \
             utils.get_volume_info(self.labels_paths[0], aff_ref=np.eye(4))
+        # If target_res and output_shape are given, compute a consistent labels_shape
+        # so the generation model accepts uniformly resampled/padded label maps
+        if target_res is not None and output_shape is not None:
+            target_res_arr = np.broadcast_to(np.atleast_1d(np.array(target_res, dtype='float')), (self.n_dims,))
+            output_shape_arr = utils.reformat_to_list(output_shape, length=self.n_dims, dtype='int')
+            self.labels_shape = output_shape_arr
+            self.atlas_res = target_res_arr
+            self._resample_inputs = True
+            self._input_target_res = target_res
+            self._input_target_shape = tuple(output_shape_arr)
+        else:
+            vol_shape, _, _, _, _, _ = utils.get_volume_info(self.labels_paths[0], aff_ref=np.eye(4))
+            self.labels_shape = vol_shape
+            self._resample_inputs = False
+            self._input_target_res = None
+            self._input_target_shape = None
         self.n_channels = n_channels
         if generation_labels is not None:
             self.generation_labels = utils.load_array_if_path(generation_labels)
@@ -311,7 +327,9 @@ class BrainGenerator:
                                                     prior_stds=self.prior_stds,
                                                     prior_distributions=self.prior_distributions,
                                                     use_specific_stats_for_channel=self.use_specific_stats_for_channel,
-                                                    mix_prior_and_random=mix_prior_and_random)
+                                                    mix_prior_and_random=mix_prior_and_random,
+                                                    target_res=self._input_target_res,
+                                                    target_shape=self._input_target_shape)
         return model_inputs_generator
 
     def _build_brain_generator(self):

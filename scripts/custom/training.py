@@ -156,8 +156,8 @@ label_weights[rh_claustrum_idx] = claustrum_weight
 print(f"Claustrum weight: {claustrum_weight}x at indices {lh_claustrum_idx} (LH=138), {rh_claustrum_idx} (RH=139)")
 
 # Shape and resolution
-target_res = 1.0
-output_shape = 160  # All training labels resampled to 160³ @ 1mm
+target_res = 0.50
+output_shape = 192  # Resampled at runtime to 192³ @ 0.5mm (96mm FOV)
 n_channels = 1
 
 # GMM sampling - maps each generation label to an intensity class

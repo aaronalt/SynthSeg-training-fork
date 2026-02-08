@@ -21,7 +21,10 @@ if gpus:
         print(f"GPU configuration error: {e}")
 '''
 import datetime
+import re
+import json
 import numpy as np
+from pathlib import Path
 from create_train_test_split_stratified import create_train_test_split, extract_test_from_validation
 from training_feature_extraction import training
 from SynthSeg.estimate_priors import build_intensity_stats
@@ -37,77 +40,74 @@ os.makedirs(log_dir, exist_ok=True)
 import shutil
 from ext.lab2im import utils as lab2im_utils
 
-# 3T training/validation files
-trainval_3T_dir = '/home/althause/data/3T/training_labels_1mm_160/t1w'  # 1mm isotropic, 160³
-
-# Subject-aware stratified split for 7T data
-train_path_7T, _, subjects_prob_7T, _ = create_train_test_split(
+# Step 1: Split 3T data — 20% for training, 80% for validation
+train_path_3T, val_path_3T, _, val_probs_3T = create_train_test_split(
     base_dirs_with_subdirs=[
         {
-            'base_dir': '/home/althause/data/7T/training_labels_1mm_160',
+            'base_dir': '/home/althause/data/3T/training_labels_native',
+            'subdirs': ['t1w'],
+            'field_strength': '3T',
+        },
+    ],
+    output_dir='/home/althause/data/training_split_3T',
+    method='symlink',
+    test_ratio=0.8,
+    seed=42,
+    prob_mode='uniform',
+    verbose=True,
+)
+
+# Get 3T validation subject IDs to exclude from main training split
+with open('/home/althause/data/training_split_3T/split_info.json') as f:
+    split_info_3T = json.load(f)
+val_subjects_3T = set(split_info_3T['test_subjects'])
+print(f"3T validation subjects (excluded from training): {val_subjects_3T}")
+print(f"3T validation set: {val_path_3T}")
+
+# Step 2: Create filtered 3T directory excluding validation subjects
+filtered_3T_base = Path('/home/althause/data/3T/training_labels_native_filtered')
+filtered_3T_dir = filtered_3T_base / 't1w'
+if filtered_3T_base.exists():
+    shutil.rmtree(filtered_3T_base)
+filtered_3T_dir.mkdir(parents=True)
+
+source_3T_dir = Path('/home/althause/data/3T/training_labels_native/t1w')
+n_included = 0
+n_excluded = 0
+for f in sorted(source_3T_dir.glob('*.nii.gz')):
+    sub_match = re.match(r'(sub-\d+)', f.name)
+    if sub_match and sub_match.group(1) in val_subjects_3T:
+        n_excluded += 1
+    else:
+        os.symlink(f.resolve(), filtered_3T_dir / f.name)
+        n_included += 1
+print(f"3T filtered: {n_included} train files, {n_excluded} val files excluded")
+
+# Step 3: Main train/val split using 7T + filtered 3T (val subjects excluded)
+train_path, val_path_7T, train_probs, _ = create_train_test_split(
+    base_dirs_with_subdirs=[
+        {
+            'base_dir': '/home/althause/data/7T/training_labels_native',
             'subdirs': ['t1w', 't2w-cor', 't2w-tra'],
             'field_strength': '7T',
+        },
+        {
+            'base_dir': str(filtered_3T_base),
+            'subdirs': ['t1w'],
+            'field_strength': '3T',
         },
     ],
     output_dir='/home/althause/data/training_split',
     method='symlink',
-    test_ratio=0.1,
+    test_ratio=0.2,
     seed=42,
     prob_mode='sqrt',
     verbose=True,
 )
 
-# Get 3T files
-trainval_files_3T = lab2im_utils.list_images_in_folder(trainval_3T_dir)
-print(f"3T data: {len(trainval_files_3T)} files for training AND validation")
-
-# Create combined training directory (7T + 3T) - reuse if exists to avoid breaking concurrent training
-combined_train_dir = '/home/althause/data/training_split/train_combined'
-if not os.path.exists(combined_train_dir) or len(os.listdir(combined_train_dir)) == 0:
-    if os.path.exists(combined_train_dir):
-        shutil.rmtree(combined_train_dir)
-    os.makedirs(combined_train_dir)
-
-    # Add 7T training files
-    for f in lab2im_utils.list_images_in_folder(train_path_7T):
-        dest = os.path.join(combined_train_dir, os.path.basename(f))
-        if not os.path.exists(dest):
-            os.symlink(f, dest)
-
-    # Add 3T files to training (with prefix to avoid name collision)
-    for f in trainval_files_3T:
-        dest = os.path.join(combined_train_dir, '3T_' + os.path.basename(f))
-        if not os.path.exists(dest):
-            os.symlink(f, dest)
-    print("Created new training symlinks")
-else:
-    print("Reusing existing training directory (concurrent training safe)")
-
-n_train_files = len(os.listdir(combined_train_dir))
-print(f"Combined training: {n_train_files} files (7T + 3T)")
-
-# Create 3T validation directory - reuse if exists
-val_3T_dir = '/home/althause/data/training_split/val_3T'
-if not os.path.exists(val_3T_dir) or len(os.listdir(val_3T_dir)) == 0:
-    if os.path.exists(val_3T_dir):
-        shutil.rmtree(val_3T_dir)
-    os.makedirs(val_3T_dir)
-    for f in trainval_files_3T:
-        dest = os.path.join(val_3T_dir, os.path.basename(f))
-        if not os.path.exists(dest):
-            os.symlink(f, dest)
-    print("Created new validation symlinks")
-else:
-    print("Reusing existing validation directory")
-
-all_train_paths = combined_train_dir
-all_val_paths = val_3T_dir
-val_subjects_prob = None
-
-print(f"\n=== Data Split Summary ===")
-print(f"Training: {combined_train_dir} ({n_train_files} files - 7T + 3T)")
-print(f"Validation: {val_3T_dir} ({len(trainval_files_3T)} 3T files)")
-print(f"Note: Same 3T files used in both - SynthSeg generates different synthetic images each time")
+all_train_paths = train_path
+all_val_paths = val_path_3T  # Validate on held-out 3T subjects
+val_subjects_prob = val_probs_3T
 
 # Pre-trained model
 path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'  # Original pretrained weights
@@ -226,7 +226,7 @@ training(all_train_paths,
          val_path=all_val_paths,
          skip_pretrain=skip_pretrain,
          finetune=False,
-         subjects_prob=None,  # Equal probability for combined training set
+         subjects_prob=train_probs,
          val_subjects_prob=val_subjects_prob,
          data_res=data_res,
          thickness=thickness,

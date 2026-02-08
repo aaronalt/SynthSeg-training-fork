@@ -242,7 +242,7 @@ training(all_train_paths,
          val_path=all_val_paths,
          skip_pretrain=skip_pretrain,
          finetune=False,
-         subjects_prob=train_probs,
+         subjects_prob=None,  # Equal probability for combined 7T+3T training set
          val_subjects_prob=val_subjects_prob,
          data_res=data_res,
          thickness=thickness,

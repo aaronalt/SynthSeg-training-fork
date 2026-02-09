@@ -46,7 +46,7 @@ def resample_images_to_isotropic(input_dir, output_dir, target_res=0.5):
 
         resampled = resample_img(img, target_affine=target_affine,
                                  target_shape=tuple(target_shape),
-                                 interpolation='continuous')
+                                 interpolation='nearest')
         nib.save(resampled, out_path)
         print(f"  Resampled {os.path.basename(f)}: {np.round(voxel_sizes, 3)}mm -> {target_res}mm iso, "
               f"shape {img.shape[:3]} -> {resampled.shape[:3]}")

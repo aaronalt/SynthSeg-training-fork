@@ -23,7 +23,6 @@ import compare_dice_batch as evaluate
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
-FIELD_STRENGTH = '3T'
 
 # Store results across all models for summary
 all_model_results = []
@@ -96,20 +95,12 @@ for path_model in model_files:
     exp = model_dir.split('/')[-1]
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
-    path_images = '/home/althause/data/training_split/test'
+    path_images = '/home/althause/data/TEST'
+    active_gt_dirs = gt_dirs['3T']
     path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
     path_vol = os.path.join(path_segm, 'volumes.csv')
-    if FIELD_STRENGTH == '7T':
-        path_images = '/home/althause/data/training_split/test'
-        active_gt_dirs = gt_dirs['7T']
-    elif FIELD_STRENGTH == '3T':
-        path_images = '/home/althause/data/3T/training_labels_native/test'
-        active_gt_dirs = gt_dirs['3T']
-    else:  # 'both'
-        path_images = '/home/althause/data/training_split/test_all'  # combined
-        active_gt_dirs = gt_dirs['7T'] + gt_dirs['3T']
 
     # Extract model params
     json_params = os.path.join(model_dir, 'training_params.json')
@@ -198,7 +189,7 @@ for path_model in model_files:
             modality = 't1w'
 
         gt = find_ground_truth(subject_id, hemisphere, modality)
-        group = FIELD_STRENGTH
+        group = '3T'
 
         if gt:
             print(f"Found {group} GT match for {subject_id} {hemisphere}: {gt.name}")

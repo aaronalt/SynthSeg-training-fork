@@ -11,8 +11,6 @@ import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
 import numpy as np
-import nibabel as nib
-from nilearn.image import resample_img
 from glob import glob
 import json
 import datetime
@@ -23,39 +21,8 @@ from pathlib import Path
 import compare_dice_batch as evaluate
 
 
-def resample_images_to_isotropic(input_dir, output_dir, target_res=0.5):
-    """Resample all nifti images in input_dir to target isotropic resolution."""
-    os.makedirs(output_dir, exist_ok=True)
-    input_files = sorted(glob(os.path.join(input_dir, '*.nii.gz')))
-    print(f"\nResampling {len(input_files)} images to {target_res}mm isotropic...")
-
-    for f in input_files:
-        out_path = os.path.join(output_dir, os.path.basename(f))
-        if os.path.exists(out_path):
-            print(f"  Already resampled: {os.path.basename(f)}")
-            continue
-
-        img = nib.load(f)
-        orig_affine = img.affine.copy()
-        voxel_sizes = np.sqrt(np.sum(orig_affine[:3, :3] ** 2, axis=0))
-        scaling = target_res / voxel_sizes
-        target_affine = orig_affine.copy()
-        target_affine[:3, :3] = orig_affine[:3, :3] * scaling
-        orig_extent = np.array(img.shape[:3]) * voxel_sizes
-        target_shape = np.ceil(orig_extent / target_res).astype(int)
-
-        resampled = resample_img(img, target_affine=target_affine,
-                                 target_shape=tuple(target_shape),
-                                 interpolation='nearest')
-        nib.save(resampled, out_path)
-        print(f"  Resampled {os.path.basename(f)}: {np.round(voxel_sizes, 3)}mm -> {target_res}mm iso, "
-              f"shape {img.shape[:3]} -> {resampled.shape[:3]}")
-
-    print(f"Resampled images saved to: {output_dir}\n")
-    return output_dir
-
 # === OPTIONS ===
-DELETE_TMP_PREDICTIONS = False  # Set to True to delete segmentations after evaluation (keeps CSVs)
+DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
 FIELD_STRENGTH = '3T'
 
 # Store results across all models for summary

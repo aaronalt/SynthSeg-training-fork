@@ -144,11 +144,6 @@ for path_model in model_files:
         path_images = '/home/althause/data/training_split/test_all'  # combined
         active_gt_dirs = gt_dirs['7T'] + gt_dirs['3T']
 
-    # Resample test data to 0.5mm isotropic
-    path_images_resampled = path_images + '_resampled_0.5mm'
-    resample_images_to_isotropic(path_images, path_images_resampled, target_res=0.5)
-    path_images = path_images_resampled
-
     # Extract model params
     json_params = os.path.join(model_dir, 'training_params.json')
     with open(json_params, "r") as jsonfile:

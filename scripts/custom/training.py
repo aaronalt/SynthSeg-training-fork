@@ -130,7 +130,7 @@ feat_multiplier = 2
 lr = 1e-4
 wl2_epochs = 0  # Skip warmup - using pretrained weights
 dice_epochs = 100  # Train longer to learn small structures
-steps_per_epoch = 5000
+steps_per_epoch = 10000
 validation_steps = 200  # More steps for stable validation with small 3T set
 
 # Generation and segmentation labels
@@ -156,7 +156,7 @@ label_weights[rh_claustrum_idx] = claustrum_weight
 print(f"Claustrum weight: {claustrum_weight}x at indices {lh_claustrum_idx} (LH=138), {rh_claustrum_idx} (RH=139)")
 
 # Shape and resolution
-target_res = 0.70
+target_res = 0.50
 output_shape = 192  # Resampled at runtime to 192³ @ 0.5mm (96mm FOV)
 n_channels = 1
 
@@ -173,8 +173,8 @@ scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 4.0
-bias_field_std = 0.7
+nonlin_std = 2.0
+bias_field_std = 0.3
 
 # Acquisition resolution parameters
 randomise_res = True

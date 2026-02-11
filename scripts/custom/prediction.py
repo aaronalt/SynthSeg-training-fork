@@ -22,7 +22,7 @@ import compare_dice_batch as evaluate
 
 
 # === OPTIONS ===
-DELETE_TMP_PREDICTIONS = False  # Set to True to delete segmentations after evaluation (keeps CSVs)
+DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
 
 # Store results across all models for summary
 all_model_results = []

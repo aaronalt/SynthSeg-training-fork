@@ -143,21 +143,30 @@ n_neutral_labels = 5
 path_segmentation_labels = path_generation_labels.copy()
 
 # === LABEL WEIGHTS FOR DICE LOSS ===
-# Higher weight = more importance during training
-# Claustrum labels (138=LH, 139=RH) weighted more heavily
-label_weights = np.ones(len(path_segmentation_labels))
-claustrum_weight = 10.0
+# Tiered weights: claustrum highest, boundary structures medium, rest low
+label_weights = np.full(len(path_segmentation_labels), 0.5)  # background context
 
-# Find claustrum indices
-lh_claustrum_idx = np.where(path_segmentation_labels == 138)[0][0]
-rh_claustrum_idx = np.where(path_segmentation_labels == 139)[0][0]
-label_weights[lh_claustrum_idx] = claustrum_weight
-label_weights[rh_claustrum_idx] = claustrum_weight
-print(f"Claustrum weight: {claustrum_weight}x at indices {lh_claustrum_idx} (LH=138), {rh_claustrum_idx} (RH=139)")
+# Claustrum (primary target)
+for lbl in [138, 139]:
+    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
+
+# White matter (critical boundary — external/extreme capsule)
+for lbl in [2, 41]:
+    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 5.0
+
+# Putamen (must not merge with claustrum)
+for lbl in [12, 51]:
+    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 5.0
+
+# Cortex/insula (lateral boundary)
+for lbl in [3, 42]:
+    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 3.0
+
+print(f"Tiered label weights: claustrum=10, WM/putamen=5, cortex=3, rest=0.5")
 
 # Shape and resolution
-target_res = 0.25
-output_shape = 256  # Resampled at runtime to 192³ @ 0.5mm (96mm FOV)
+target_res = 0.50
+output_shape = 192  # Resampled at runtime to 192³ @ 0.5mm (96mm FOV)
 n_channels = 1
 
 # GMM sampling - maps each generation label to an intensity class

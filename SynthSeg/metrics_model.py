@@ -48,7 +48,7 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None):
     if metrics == 'dice':
         last_tensor = layers.DiceLoss(
             class_weights=class_weights,
-            boundary_weights=3,      # Extra weight for boundary voxels (4x at boundaries)
+            boundary_weights=2,      # Extra weight for boundary voxels
             boundary_dist=2,         # Within 2 voxels of boundary (smaller for thin structures)
             skip_background=True     # Don't weight background boundaries (default)
         )([labels_gt, last_tensor])

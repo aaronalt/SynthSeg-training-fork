@@ -182,13 +182,13 @@ scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 2.0
+nonlin_std = 1.0  # reduced from 2.0 — less deformation to preserve thin claustrum shape
 bias_field_std = 0.3
 
 # Acquisition resolution parameters
 randomise_res = True
-max_res_iso = 1.5
-max_res_aniso = 2.0
+max_res_iso = 1.0    # reduced from 1.5 — keep training res closer to 3T test data (~1mm)
+max_res_aniso = 1.5   # reduced from 2.0 — avoid extreme aniso that blurs claustrum
 data_res = None
 thickness = None
 

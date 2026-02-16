@@ -2,8 +2,8 @@ import nibabel as nib
 import numpy as np
 
 # --- Edit this ---
-label_path = '/home/althause/data/claustrum_gt/7T/T1_CONTROL/sub-7806_ses-T3_t1w_claustrum_label_rh.nii.gz'
-label_value = 1  # 138=left, 139=right
+label_path = '/home/althause/data/7T/training_labels_native/t1w/sub-7806_ses-T3_t1w_rh_training_label.nii.gz'
+label_value = 139  # 138=left, 139=right
 
 img = nib.load(label_path)
 data = img.get_fdata()

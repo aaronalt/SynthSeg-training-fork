@@ -1,26 +1,11 @@
+import os
 import nibabel as nib
 import numpy as np
 
-# --- Edit this ---
-label_path = '/home/althause/data/7T/training_labels_native/t1w/sub-7806_ses-T3_t1w_rh_training_label.nii.gz'
-label_value = 139  # 138=left, 139=right
+label_dir = '/home/althause/data/7T/training_labels_native/t1w/'
 
-img = nib.load(label_path)
-data = img.get_fdata()
-unique_labels = np.unique(data)
-print("Labels found:", unique_labels)
-# -----------------
 
 def get_label_morphometrics(label_path, label_value):
-    """
-    Load a NIfTI label map and compute basic morphometrics for a given label.
-
-    Returns dict with:
-      - volume_mm3: total volume in mm³
-      - voxel_count: number of voxels
-      - bbox_extent_mm: bounding box size along x, y, z in mm
-      - center_of_mass_vox: center of mass in voxel coordinates
-    """
     img = nib.load(label_path)
     data = img.get_fdata()
     voxel_sizes = img.header.get_zooms()[:3]
@@ -51,5 +36,24 @@ def get_label_morphometrics(label_path, label_value):
     }
 
 
-result = get_label_morphometrics(label_path, label_value)
-print(result)
+results = []
+for fname in sorted(os.listdir(label_dir)):
+    if not fname.endswith('.nii.gz'):
+        continue
+
+    hemi = 'lh' if '_lh_' in fname else 'rh'
+    label_value = 138 if hemi == 'lh' else 139
+    sub = fname.split('_ses')[0]  # e.g. 'sub-5166'
+
+    metrics = get_label_morphometrics(os.path.join(label_dir, fname), label_value)
+    if metrics:
+        metrics['subject'] = sub
+        metrics['hemi'] = hemi
+        metrics['filename'] = fname
+        results.append(metrics)
+    else:
+        print(f"WARNING: no label {label_value} found in {fname}")
+
+for r in results:
+    print(
+        f"{r['subject']} {r['hemi']}  vol={r['volume_mm3']:.1f} mm³  bbox={tuple(round(x, 1) for x in r['bbox_extent_mm'])}")

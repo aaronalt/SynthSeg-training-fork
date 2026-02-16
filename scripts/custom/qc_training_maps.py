@@ -73,3 +73,21 @@ for sub in sorted(subject_vols):
         rh = subject_vols[sub]['rh']
         ai = (lh - rh) / (lh + rh)
         print(f"  {sub}  LH={lh:.0f}  RH={rh:.0f}  AI={ai:+.3f}")
+
+# --- Volume z-scores (separate for lh and rh) ---
+lh_vols = [(r['subject'], r['volume_mm3']) for r in results if r['hemi'] == 'lh']
+rh_vols = [(r['subject'], r['volume_mm3']) for r in results if r['hemi'] == 'rh']
+
+def print_zscores(vols, hemi_label):
+    subs, vals = zip(*vols)
+    vals = np.array(vals)
+    mean = vals.mean()
+    std = vals.std()
+    print(f"\n{hemi_label}:  mean={mean:.0f} mm³,  std={std:.0f} mm³")
+    for sub, vol in sorted(zip(subs, vals), key=lambda x: abs((x[1]-mean)/std), reverse=True):
+        z = (vol - mean) / std
+        flag = '  ***' if abs(z) > 2 else '  *' if abs(z) > 1.5 else ''
+        print(f"  {sub}  vol={vol:.0f}  z={z:+.2f}{flag}")
+
+print_zscores(lh_vols, 'LH')
+print_zscores(rh_vols, 'RH')

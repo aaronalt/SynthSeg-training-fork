@@ -91,3 +91,51 @@ def print_zscores(vols, hemi_label):
 
 print_zscores(lh_vols, 'LH')
 print_zscores(rh_vols, 'RH')
+
+from scipy import ndimage
+
+
+def get_surface_area(label_path, label_value):
+    """
+    Estimate surface area by counting exposed voxel faces.
+    Returns surface area in mm².
+    """
+    img = nib.load(label_path)
+    data = img.get_fdata()
+    voxel_sizes = img.header.get_zooms()[:3]
+
+    mask = (data == label_value).astype(np.uint8)
+
+    # count exposed faces along each axis
+    face_areas = [
+        voxel_sizes[1] * voxel_sizes[2],  # x-faces
+        voxel_sizes[0] * voxel_sizes[2],  # y-faces
+        voxel_sizes[0] * voxel_sizes[1],  # z-faces
+    ]
+
+    sa = 0.0
+    for axis in range(3):
+        diff = np.diff(mask, axis=axis)
+        sa += np.count_nonzero(diff) * face_areas[axis]
+
+    # add boundary faces (voxels touching image edge)
+    for axis in range(3):
+        first = np.take(mask, 0, axis=axis)
+        last = np.take(mask, mask.shape[axis] - 1, axis=axis)
+        sa += (first.sum() + last.sum()) * face_areas[axis]
+
+    return sa
+
+print("\nSA:V ratio (higher = thinner/more complex, lower = more blob-like):\n")
+sav_results = []
+for r in results:
+    path = os.path.join(label_dir, r['filename'])
+    label_value = 138 if r['hemi'] == 'lh' else 139
+    sa = get_surface_area(path, label_value)
+    sav = sa / r['volume_mm3']
+    sav_results.append((r['subject'], r['hemi'], sav, sa, r['volume_mm3']))
+
+# sort by SA:V
+sav_results.sort(key=lambda x: x[2])
+for sub, hemi, sav, sa, vol in sav_results:
+    print(f"  {sub} {hemi}  SA:V={sav:.3f}  SA={sa:.0f} mm²  vol={vol:.0f} mm³")

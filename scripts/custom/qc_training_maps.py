@@ -139,3 +139,53 @@ for r in results:
 sav_results.sort(key=lambda x: x[2])
 for sub, hemi, sav, sa, vol in sav_results:
     print(f"  {sub} {hemi}  SA:V={sav:.3f}  SA={sa:.0f} mm²  vol={vol:.0f} mm³")
+
+
+# --- Summary of all flags ---
+from collections import defaultdict
+
+flags = defaultdict(list)
+
+# 1. Bbox x-extent > 40mm
+for r in results:
+    x_extent = r['bbox_extent_mm'][0]
+    if x_extent > 40:
+        flags[(r['subject'], r['hemi'])].append(f"bbox_x={x_extent:.0f}mm")
+
+# 2. Asymmetry |AI| > 0.15
+for sub in sorted(subject_vols):
+    if 'lh' in subject_vols[sub] and 'rh' in subject_vols[sub]:
+        lh = subject_vols[sub]['lh']
+        rh = subject_vols[sub]['rh']
+        ai = (lh - rh) / (lh + rh)
+        if abs(ai) > 0.15:
+            flags[(sub, 'lh')].append(f"AI={ai:+.3f}")
+            flags[(sub, 'rh')].append(f"AI={ai:+.3f}")
+
+# 3. Volume |z| > 1.5
+for hemi_label, vols in [('lh', lh_vols), ('rh', rh_vols)]:
+    subs, vals = zip(*vols)
+    vals = np.array(vals)
+    mean, std = vals.mean(), vals.std()
+    for sub, vol in zip(subs, vals):
+        z = (vol - mean) / std
+        if abs(z) > 1.5:
+            flags[(sub, hemi_label)].append(f"vol_z={z:+.2f}")
+
+# 4. SA:V in bottom or top 15%
+sav_vals = [x[2] for x in sav_results]
+low_thresh = np.percentile(sav_vals, 15)
+high_thresh = np.percentile(sav_vals, 85)
+for sub, hemi, sav, sa, vol in sav_results:
+    if sav < low_thresh:
+        flags[(sub, hemi)].append(f"SA:V_low={sav:.3f}")
+    elif sav > high_thresh:
+        flags[(sub, hemi)].append(f"SA:V_high={sav:.3f}")
+
+# Print sorted by number of flags
+print("Labels with flags (sorted by flag count):\n")
+for key, flag_list in sorted(flags.items(), key=lambda x: -len(x[1])):
+    sub, hemi = key
+    print(f"  {sub} {hemi}  [{len(flag_list)} flags]  {', '.join(flag_list)}")
+
+print(f"\nClean labels: {42 - len(flags)}/{42}")

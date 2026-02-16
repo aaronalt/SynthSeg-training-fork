@@ -2,7 +2,7 @@ import os
 import nibabel as nib
 import numpy as np
 
-label_dir = '/home/althause/data/7T/training_labels_native/t2w/'
+label_dir = '/home/althause/data/7T/training_labels_native/t2w-cor/'
 
 
 def get_label_morphometrics(label_path, label_value):

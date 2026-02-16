@@ -57,3 +57,19 @@ for fname in sorted(os.listdir(label_dir)):
 for r in results:
     print(
         f"{r['subject']} {r['hemi']}  vol={r['volume_mm3']:.1f} mm³  bbox={tuple(round(x, 1) for x in r['bbox_extent_mm'])}")
+
+# --- Asymmetry ratio per subject ---
+from collections import defaultdict
+
+subject_vols = defaultdict(dict)
+for r in results:
+    subject_vols[r['subject']][r['hemi']] = r['volume_mm3']
+
+print("\nAsymmetry index (LH - RH) / (LH + RH):")
+print("  0 = symmetric, positive = LH larger, negative = RH larger\n")
+for sub in sorted(subject_vols):
+    if 'lh' in subject_vols[sub] and 'rh' in subject_vols[sub]:
+        lh = subject_vols[sub]['lh']
+        rh = subject_vols[sub]['rh']
+        ai = (lh - rh) / (lh + rh)
+        print(f"  {sub}  LH={lh:.0f}  RH={rh:.0f}  AI={ai:+.3f}")

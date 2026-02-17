@@ -29,6 +29,9 @@ from create_train_test_split_stratified import create_train_test_split, extract_
 from training_feature_extraction import training
 from SynthSeg.estimate_priors import build_intensity_stats
 
+# Subjects to exclude from training (poor labels)
+EXCLUDE_SUBJECTS = {'sub-8151', 'sub-6497', 'sub-7796'}
+
 # Paths
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 path_model_dir = os.path.join('./models/test', experiment_name)
@@ -78,14 +81,17 @@ filtered_3T_dir.mkdir(parents=True)
 source_3T_dir = Path('/home/althause/data/3T/training_labels_native/t1w')
 n_included = 0
 n_excluded = 0
+n_excluded_bad = 0
 for f in sorted(source_3T_dir.glob('*.nii.gz')):
     sub_match = re.match(r'(sub-\d+)', f.name)
-    if sub_match and sub_match.group(1) in val_subjects_3T:
+    if sub_match and sub_match.group(1) in EXCLUDE_SUBJECTS:
+        n_excluded_bad += 1
+    elif sub_match and sub_match.group(1) in val_subjects_3T:
         n_excluded += 1
     else:
         os.symlink(f.resolve(), filtered_3T_dir / f.name)
         n_included += 1
-print(f"3T filtered: {n_included} train files, {n_excluded} val files excluded")
+print(f"3T filtered: {n_included} train files, {n_excluded} val files excluded, {n_excluded_bad} excluded (poor labels)")
 
 # Step 3: Combine all 7T + 10% 3T train into one training directory
 combined_train_dir = os.path.join(split_dir_main, 'train_combined')
@@ -97,6 +103,9 @@ for subdir in ['t1w', 't2w-cor', 't2w-tra']:
     if not subdir_path.exists():
         continue
     for f in sorted(subdir_path.glob('*.nii.gz')):
+        sub_match = re.match(r'(sub-\d+)', f.name)
+        if sub_match and sub_match.group(1) in EXCLUDE_SUBJECTS:
+            continue
         dest = os.path.join(combined_train_dir, f'7T_{subdir}_{f.name}')
         if not os.path.exists(dest):
             os.symlink(f.resolve(), dest)
@@ -127,11 +136,11 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-4
+lr = 1e-5
 wl2_epochs = 0  # Skip warmup - using pretrained weights
-dice_epochs = 100  # Train longer to learn small structures
+dice_epochs = 100
 steps_per_epoch = 10000
-validation_steps = 200  # More steps for stable validation with small 3T set
+validation_steps = 200
 
 # Generation and segmentation labels
 # Use ALL labels for segmentation - model learns full anatomy, extract claustrum at inference
@@ -143,26 +152,10 @@ n_neutral_labels = 5
 path_segmentation_labels = path_generation_labels.copy()
 
 # === LABEL WEIGHTS FOR DICE LOSS ===
-# Tiered weights: claustrum highest, boundary structures medium, rest low
-label_weights = np.full(len(path_segmentation_labels), 0.5)  # background context
-
-# Claustrum (primary target)
+# Claustrum=10, all other structures=1 (matching experiment_20260210)
+label_weights = np.ones(len(path_segmentation_labels))
 for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
-
-# White matter (critical boundary — external/extreme capsule)
-for lbl in [2, 41]:
-    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 5.0
-
-# Putamen (must not merge with claustrum)
-for lbl in [12, 51]:
-    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 5.0
-
-# Cortex/insula (lateral boundary)
-for lbl in [3, 42]:
-    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 3.0
-
-print(f"Tiered label weights: claustrum=10, WM/putamen=5, cortex=3, rest=0.5")
 
 # Shape and resolution
 target_res = 0.50
@@ -182,13 +175,13 @@ scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.012
 translation_bounds = False
-nonlin_std = 1.0  # reduced from 2.0 — less deformation to preserve thin claustrum shape
+nonlin_std = 2.0
 bias_field_std = 0.3
 
 # Acquisition resolution parameters
 randomise_res = True
-max_res_iso = 1.0    # reduced from 1.5 — keep training res closer to 3T test data (~1mm)
-max_res_aniso = 1.5   # reduced from 2.0 — avoid extreme aniso that blurs claustrum
+max_res_iso = 1.5
+max_res_aniso = 2.0
 data_res = None
 thickness = None
 

@@ -136,7 +136,7 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-5
+lr = 1e-4
 wl2_epochs = 0  # Skip warmup - using pretrained weights
 dice_epochs = 100
 steps_per_epoch = 10000

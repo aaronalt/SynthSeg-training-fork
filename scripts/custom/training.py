@@ -30,7 +30,8 @@ from training_feature_extraction import training
 from SynthSeg.estimate_priors import build_intensity_stats
 
 # Subjects to exclude from training (poor labels)
-EXCLUDE_SUBJECTS = {'sub-8151', 'sub-6497', 'sub-7796'}
+# EXCLUDE_SUBJECTS = {'sub-8151', 'sub-6497', 'sub-7796'}
+EXCLUDE_SUBJECTS = []
 
 # Paths
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -177,6 +178,7 @@ shearing_bounds = 0.012
 translation_bounds = False
 nonlin_std = 2.0
 bias_field_std = 0.3
+noise_std = 100  # Gaussian noise: sigma ~ Uniform(0, noise_std), applied with p=0.95
 
 # Acquisition resolution parameters
 randomise_res = True
@@ -217,6 +219,7 @@ training(all_train_paths,
          nonlin_std=nonlin_std,
          randomise_res=randomise_res,
          bias_field_std=bias_field_std,
+         noise_std=noise_std,
          n_levels=n_levels,
          nb_conv_per_level=nb_conv_per_level,
          conv_size=conv_size,

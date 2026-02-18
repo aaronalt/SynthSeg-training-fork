@@ -59,6 +59,7 @@ class BrainGenerator:
                  thickness=None,
                  bias_field_std=.7,
                  bias_scale=.025,
+                 noise_std=100,
                  return_gradients=False):
         """
         This class is wrapper around the labels_to_image_model model. It contains the GPU model that generates images
@@ -274,6 +275,8 @@ class BrainGenerator:
         # bias field parameters
         self.bias_field_std = bias_field_std
         self.bias_scale = bias_scale
+        # noise parameters
+        self.noise_std = noise_std
         self.return_gradients = return_gradients
 
         # build transformation model
@@ -311,6 +314,7 @@ class BrainGenerator:
                                                 thickness=self.thickness,
                                                 bias_field_std=self.bias_field_std,
                                                 bias_scale=self.bias_scale,
+                                                noise_std=self.noise_std,
                                                 return_gradients=self.return_gradients)
         out_shape = lab_to_im_model.output[0].get_shape().as_list()[1:]
         return lab_to_im_model, out_shape

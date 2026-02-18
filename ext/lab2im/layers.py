@@ -1097,6 +1097,45 @@ class BiasFieldCorruption(Layer):
             return inputs
 
 
+class GaussianNoiseCorruption(Layer):
+    """Adds random voxel-wise Gaussian noise to the input tensor.
+    Following the method described in the claustrum segmentation paper:
+      1) Sample sigma from Uniform(0, max_noise_std)
+      2) Sample independent voxel-wise noise from N(0, sigma^2)
+      3) Add noise to the input with a given probability
+    Applied right after bias field simulation in the generation pipeline.
+    The input tensor is expected to have shape [batchsize, shape_dim1, ..., shape_dimn, channel].
+
+    :param max_noise_std: maximum standard deviation (sampled from [0, max_noise_std]). Default is 100.
+    :param prob: probability of adding noise. Default is 0.95.
+    """
+
+    def __init__(self, max_noise_std=100, prob=0.95, **kwargs):
+        self.max_noise_std = max_noise_std
+        self.prob = prob
+        super(GaussianNoiseCorruption, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super().get_config()
+        config["max_noise_std"] = self.max_noise_std
+        config["prob"] = self.prob
+        return config
+
+    def call(self, inputs, **kwargs):
+        if self.max_noise_std > 0:
+            # sample sigma from Uniform(0, max_noise_std)
+            sigma = tf.random.uniform([1], minval=0, maxval=self.max_noise_std)
+            noise = tf.random.normal(tf.shape(inputs), mean=0.0, stddev=sigma)
+
+            if self.prob == 1:
+                return inputs + noise
+            else:
+                rand_trans = tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob))
+                return K.switch(rand_trans, inputs + noise, inputs)
+        else:
+            return inputs
+
+
 class IntensityAugmentation(Layer):
     """This layer enables to augment the intensities of the input tensor, as well as to apply min_max normalisation.
     The following steps are applied (all are optional):

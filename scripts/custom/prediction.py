@@ -45,7 +45,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # Find all model checkpoints and sort by epoch number
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[20:]
+# model_files = model_files[20:]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
 gt_dirs = {

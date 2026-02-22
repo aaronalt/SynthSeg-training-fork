@@ -23,6 +23,7 @@ import compare_dice_batch as evaluate
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
+FORCE_FIELD_STRENGTH = None  # Set to '3T', '7T', or None for auto-detect
 
 # Store results across all models for summary
 all_model_results = []
@@ -102,18 +103,23 @@ for path_model in model_files:
     model = os.path.basename(path_model)
     path_images = '/home/althause/data/TEST'
 
-    # Auto-detect field strength from TEST folder
-    field_strength = '3T'  # default
-    if '7T' in path_images or '7t' in path_images.lower():
-        field_strength = '7T'
+    # Determine field strength (manual override or auto-detect)
+    if FORCE_FIELD_STRENGTH:
+        field_strength = FORCE_FIELD_STRENGTH
+        print(f"MANUAL override: Using {field_strength} ground truth")
     else:
-        # Check if any test images have 7T in their filename
-        test_files = glob(os.path.join(path_images, '*'))
-        if any('7T' in str(f) or '7t' in str(f).lower() for f in test_files):
+        # Auto-detect from TEST folder path or filenames
+        field_strength = '3T'  # default
+        if '7T' in path_images or '7t' in path_images.lower():
             field_strength = '7T'
+        else:
+            # Check if any test images have 7T in their filename
+            test_files = glob(os.path.join(path_images, '*'))
+            if any('7T' in str(f) or '7t' in str(f).lower() for f in test_files):
+                field_strength = '7T'
+        print(f"Auto-detected field strength: {field_strength}")
 
     active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
-    print(f"Detected field strength: {field_strength}")
     print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
     path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')

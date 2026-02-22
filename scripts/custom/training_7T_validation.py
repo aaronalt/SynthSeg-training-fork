@@ -20,7 +20,7 @@ import shutil
 
 # === CONFIGURATION ===
 # High-quality 3T subjects to add to validation (manual curation)
-HIGH_QUALITY_3T_VALIDATION = ['sub-5740', 'sub-6608', 'sub-7497']  # Add your subject IDs here
+HIGH_QUALITY_3T_VALIDATION = ['sub-7796', 'sub-8510']
 
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
@@ -101,9 +101,11 @@ for f in sorted(source_3T_dir.glob('*.nii.gz')):
 
 print(f"Combined validation set: {n_7T_val} 7T files + {n_3T_val} 3T files = {n_7T_val + n_3T_val} total")
 
-# Create validation probability distribution (uniform across all val subjects)
+# Create validation probability distribution (uniform across all val files)
+# BrainGenerator expects a numpy array with one probability per file (not per subject)
 val_subjects_combined = list(val_subjects_7T) + HIGH_QUALITY_3T_VALIDATION
-val_probs_combined = {sub: 1.0 / len(val_subjects_combined) for sub in val_subjects_combined}
+n_total_val_files = n_7T_val + n_3T_val
+val_probs_combined = np.ones(n_total_val_files, dtype='float32') / n_total_val_files  # Uniform
 
 # === STEP 3: Training data = 80% 7T only (no 3T in training) ===
 print("\n--- Step 3: Training set = 80% 7T ---")

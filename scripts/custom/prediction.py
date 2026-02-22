@@ -101,7 +101,20 @@ for path_model in model_files:
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
     path_images = '/home/althause/data/TEST'
-    active_gt_dirs = gt_dirs['3T']
+
+    # Auto-detect field strength from TEST folder
+    field_strength = '3T'  # default
+    if '7T' in path_images or '7t' in path_images.lower():
+        field_strength = '7T'
+    else:
+        # Check if any test images have 7T in their filename
+        test_files = glob(os.path.join(path_images, '*'))
+        if any('7T' in str(f) or '7t' in str(f).lower() for f in test_files):
+            field_strength = '7T'
+
+    active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
+    print(f"Detected field strength: {field_strength}")
+    print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
     path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
@@ -194,7 +207,7 @@ for path_model in model_files:
             modality = 't1w'
 
         gt = find_ground_truth(subject_id, hemisphere, modality)
-        group = '3T'
+        group = field_strength  # Use auto-detected field strength
 
         if gt:
             print(f"Found {group} GT match for {subject_id} {hemisphere}: {gt.name}")

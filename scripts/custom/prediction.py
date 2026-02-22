@@ -23,7 +23,7 @@ import compare_dice_batch as evaluate
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
-FORCE_FIELD_STRENGTH = None  # Set to '3T', '7T', or None for auto-detect
+FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
 
 # Store results across all models for summary
 all_model_results = []
@@ -119,8 +119,13 @@ for path_model in model_files:
                 field_strength = '7T'
         print(f"Auto-detected field strength: {field_strength}")
 
-    active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
-    print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
+    # Set active GT directories based on field strength
+    if field_strength == 'both':
+        active_gt_dirs = gt_dirs['3T'] + gt_dirs['7T']
+        print(f"Using GT directories (3T + 7T): {[str(d) for d in active_gt_dirs]}")
+    else:
+        active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
+        print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
     path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')

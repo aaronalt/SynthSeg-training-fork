@@ -67,14 +67,16 @@ gt_dirs = {
 
 
 def find_ground_truth(subject_id, hemisphere, modality=None):
+    # Use recursive glob to search subdirectories too
     patterns = [
-        f'*{subject_id}*{hemisphere}*.nii.gz',
-        f'*{subject_id}*_{hemisphere}_*.nii.gz',
-        f'sub-{subject_id}*{hemisphere}*.nii.gz',
+        f'**/*{subject_id}*_{hemisphere}.nii.gz',
+        f'**/*{subject_id}*_{hemisphere}_*.nii.gz',
+        f'**/*{subject_id}*{hemisphere}*.nii.gz',
     ]
 
     for gt_dir in active_gt_dirs:
         if not gt_dir.exists():
+            print(f"  GT dir does not exist: {gt_dir}")
             continue
         for pattern in patterns:
             matches = list(gt_dir.glob(pattern))
@@ -84,6 +86,7 @@ def find_ground_truth(subject_id, hemisphere, modality=None):
                         if modality in m.name.lower():
                             return m
                 return matches[0]
+    print(f"  WARNING: No GT found for sub-{subject_id} {hemisphere} in {[str(d) for d in active_gt_dirs]}")
     return None
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')

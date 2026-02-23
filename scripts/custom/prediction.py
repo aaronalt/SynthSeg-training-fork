@@ -200,7 +200,7 @@ for path_model in model_files:
     path_subj = Path(path_segm)
     for sub in sorted(path_subj.glob('*nii.gz')):
         name = sub.stem
-        match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
+        match = re.search(r'(?:sub-)?(\d{4,}).*?(lh|rh)', name, re.IGNORECASE)
 
         if not match:
             continue

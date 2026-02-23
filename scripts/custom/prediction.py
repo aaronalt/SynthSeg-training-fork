@@ -66,47 +66,25 @@ gt_dirs = {
 }
 
 
-def build_gt_index(gt_dir_list):
-    """Build a lookup: (subject_id, hemisphere) -> [list of GT file paths]"""
-    index = {}
-    for gt_dir in gt_dir_list:
-        if not gt_dir.exists():
-            print(f"  GT dir does not exist: {gt_dir}")
-            continue
-        # Recursively find all .nii.gz files
-        for f in gt_dir.rglob('*.nii.gz'):
-            name = f.name.lower()
-            # Extract subject ID (4+ digit number)
-            sub_match = re.search(r'(?:sub-)?(\d{4,})', f.name)
-            if not sub_match:
-                continue
-            sid = sub_match.group(1)
-            # Extract hemisphere
-            if '_lh' in name or '.lh' in name or '_lh.' in name:
-                hemi = 'lh'
-            elif '_rh' in name or '.rh' in name or '_rh.' in name:
-                hemi = 'rh'
-            else:
-                continue
-            index.setdefault((sid, hemi), []).append(f)
-    print(f"  GT index: {len(index)} entries from {[str(d) for d in gt_dir_list]}")
-    for k, v in sorted(index.items()):
-        print(f"    {k}: {[f.name for f in v]}")
-    return index
-
-gt_index = {}  # populated per model loop
-
 def find_ground_truth(subject_id, hemisphere, modality=None):
-    key = (subject_id, hemisphere)
-    matches = gt_index.get(key, [])
-    if not matches:
-        print(f"  WARNING: No GT found for sub-{subject_id} {hemisphere}")
-        return None
-    if modality:
-        for m in matches:
-            if modality in m.name.lower():
-                return m
-    return matches[0]
+    patterns = [
+        f'*{subject_id}*{hemisphere}*.nii.gz',
+        f'*{subject_id}*_{hemisphere}_*.nii.gz',
+        f'sub-{subject_id}*{hemisphere}*.nii.gz',
+    ]
+
+    for gt_dir in active_gt_dirs:
+        if not gt_dir.exists():
+            continue
+        for pattern in patterns:
+            matches = list(gt_dir.glob(pattern))
+            if matches:
+                if modality:
+                    for m in matches:
+                        if modality in m.name.lower():
+                            return m
+                return matches[0]
+    return None
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')
 def get_epoch(f):
@@ -148,7 +126,6 @@ for path_model in model_files:
     else:
         active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
         print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
-    gt_index = build_gt_index(active_gt_dirs)
     path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
@@ -223,7 +200,7 @@ for path_model in model_files:
     path_subj = Path(path_segm)
     for sub in sorted(path_subj.glob('*nii.gz')):
         name = sub.stem
-        match = re.search(r'(?:sub-)?(\d{4,}).*?(lh|rh)', name, re.IGNORECASE)
+        match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
 
         if not match:
             continue

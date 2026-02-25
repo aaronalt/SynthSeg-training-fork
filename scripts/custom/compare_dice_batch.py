@@ -104,7 +104,14 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
         gt_combined = (gt_data > 0)
 
     intersection = np.logical_and(pred_combined, gt_combined).sum()
-    print(f"  DEBUG: Intersection voxels: {intersection}")
+    print(f"  DEBUG: pred voxels={pred_combined.sum()}, gt voxels={gt_combined.sum()}, intersection={intersection}")
+    if pred_combined.sum() == 0:
+        print(f"  WARNING: No claustrum voxels (138/139) in prediction! Unique labels: {np.unique(pred_data[pred_data > 0])[:10]}")
+    if intersection == 0 and pred_combined.sum() > 0 and gt_combined.sum() > 0:
+        # Both have voxels but no overlap — likely spatial mismatch
+        pred_coords = np.array(np.where(pred_combined)).mean(axis=1)
+        gt_coords = np.array(np.where(gt_combined)).mean(axis=1)
+        print(f"  WARNING: Spatial mismatch! Pred centroid (vox): {pred_coords.astype(int)}, GT centroid (vox): {gt_coords.astype(int)}")
 
     # 7. Compute Metrics
     manual_pixdim = nib.affines.voxel_sizes(manual_nii.affine)

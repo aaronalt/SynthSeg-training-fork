@@ -131,6 +131,74 @@ def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
             np.array(dice_scores), subject_ids)
 
 
+def extract_features(seg_rois, unc_rois):
+    """
+    Extract summary statistics from seg + uncertainty maps.
+    These are the features the quality model learns from.
+
+    For ~50 samples, hand-crafted features + simple model vastly
+    outperforms a 3D CNN which would have millions of parameters.
+    """
+    features = []
+    for i in range(len(seg_rois)):
+        seg = seg_rois[i]
+        unc = unc_rois[i]
+        claustrum_mask = seg > 0.5
+
+        # Segmentation features
+        cl_volume = claustrum_mask.sum()
+        total_volume = seg.size
+        cl_fraction = cl_volume / total_volume if total_volume > 0 else 0
+
+        # Uncertainty features (within claustrum)
+        if cl_volume > 0:
+            unc_in_cl = unc[claustrum_mask]
+            unc_mean_cl = unc_in_cl.mean()
+            unc_std_cl = unc_in_cl.std()
+            unc_max_cl = unc_in_cl.max()
+            unc_median_cl = np.median(unc_in_cl)
+            # Fraction of claustrum with high uncertainty
+            unc_high_frac = (unc_in_cl > np.percentile(unc, 90)).mean()
+        else:
+            unc_mean_cl = unc_std_cl = unc_max_cl = unc_median_cl = 0.0
+            unc_high_frac = 1.0
+
+        # Uncertainty features (boundary: dilated mask - mask)
+        from scipy.ndimage import binary_dilation
+        dilated = binary_dilation(claustrum_mask, iterations=2)
+        boundary = dilated & ~claustrum_mask
+        if boundary.sum() > 0:
+            unc_boundary_mean = unc[boundary].mean()
+            unc_boundary_max = unc[boundary].max()
+        else:
+            unc_boundary_mean = unc_boundary_max = 0.0
+
+        # Global uncertainty features
+        unc_global_mean = unc.mean()
+        unc_global_std = unc.std()
+
+        # Compactness: surface area / volume ratio (approximate)
+        from scipy.ndimage import binary_erosion
+        eroded = binary_erosion(claustrum_mask, iterations=1)
+        surface_voxels = claustrum_mask.sum() - eroded.sum()
+        compactness = surface_voxels / max(cl_volume, 1)
+
+        features.append([
+            cl_volume, cl_fraction, compactness,
+            unc_mean_cl, unc_std_cl, unc_max_cl, unc_median_cl, unc_high_frac,
+            unc_boundary_mean, unc_boundary_max,
+            unc_global_mean, unc_global_std,
+        ])
+
+    feature_names = [
+        'cl_volume', 'cl_fraction', 'compactness',
+        'unc_mean_cl', 'unc_std_cl', 'unc_max_cl', 'unc_median_cl', 'unc_high_frac',
+        'unc_boundary_mean', 'unc_boundary_max',
+        'unc_global_mean', 'unc_global_std',
+    ]
+    return np.array(features, dtype=np.float32), feature_names
+
+
 def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
           epochs=100, batch_size=4, val_split=0.2):
     """Train the quality model and save weights."""
@@ -139,64 +207,126 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
     seg_rois, unc_rois, dice_scores, subject_ids = load_and_match_data(
         tta_dir, dice_csv, roi_size)
 
+    # Filter out Dice=0 (likely GT matching failures, not real scores)
+    valid = dice_scores > 0.01
+    n_removed = (~valid).sum()
+    if n_removed > 0:
+        print(f"\nRemoved {n_removed} samples with Dice~0 (likely GT matching failures)")
+        seg_rois = seg_rois[valid]
+        unc_rois = unc_rois[valid]
+        dice_scores = dice_scores[valid]
+        subject_ids = [s for s, v in zip(subject_ids, valid) if v]
+
     if len(dice_scores) < 10:
-        print(f"\nWARNING: Only {len(dice_scores)} samples. "
-              f"Need at least ~20 for meaningful training.")
+        print(f"\nWARNING: Only {len(dice_scores)} samples.")
         if len(dice_scores) < 5:
             print("Too few samples, aborting.")
             return None
 
-    # Add channel dimension
-    X_seg = seg_rois[..., np.newaxis]
-    X_unc = unc_rois[..., np.newaxis]
+    # Extract features instead of using raw 3D volumes
+    X, feature_names = extract_features(seg_rois, unc_rois)
     y = dice_scores.astype(np.float32)
 
-    print(f"\nTraining data shapes:")
-    print(f"  Seg ROIs: {X_seg.shape}")
-    print(f"  Unc ROIs: {X_unc.shape}")
-    print(f"  Dice scores: {y.shape}")
+    print(f"\nFeature matrix: {X.shape} ({len(feature_names)} features)")
+    print(f"Features: {feature_names}")
+    print(f"Dice scores: n={len(y)}, mean={y.mean():.4f}, std={y.std():.4f}")
 
-    # Build model
-    model = build_quality_model(roi_size)
-    model.summary()
+    # Normalize features
+    X_mean = X.mean(axis=0)
+    X_std = X.std(axis=0) + 1e-8
+    X_norm = (X - X_mean) / X_std
 
-    # Callbacks
-    from keras.callbacks import EarlyStopping, ReduceLROnPlateau
+    # === Approach 1: Ridge regression (baseline) ===
+    from sklearn.linear_model import RidgeCV
+    from sklearn.model_selection import LeaveOneOut, cross_val_predict
 
-    callbacks = [
-        EarlyStopping(monitor='val_loss', patience=20,
-                      restore_best_weights=True, verbose=1),
-        ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                          patience=8, verbose=1),
-    ]
+    ridge = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], cv=5)
+    # Leave-one-out cross-validation for honest evaluation
+    loo_preds = cross_val_predict(ridge, X_norm, y, cv=LeaveOneOut())
+    loo_corr = np.corrcoef(y, loo_preds)[0, 1]
+    loo_rmse = np.sqrt(np.mean((y - loo_preds) ** 2))
 
-    # Train
-    print(f"\nTraining with {len(y)} samples "
-          f"({int(len(y) * (1 - val_split))} train, "
-          f"{int(len(y) * val_split)} val)")
+    # Fit on all data for final model
+    ridge.fit(X_norm, y)
+    print(f"\n=== Ridge Regression (LOO cross-validated) ===")
+    print(f"Pearson r: {loo_corr:.4f}")
+    print(f"RMSE: {loo_rmse:.4f}")
+    print(f"Best alpha: {ridge.alpha_:.2f}")
 
-    history = model.fit(
-        [X_seg, X_unc], y,
-        batch_size=batch_size,
-        epochs=epochs,
-        validation_split=val_split,
-        callbacks=callbacks,
-        verbose=1,
-    )
+    # Feature importance
+    coefs = ridge.coef_
+    importance = sorted(zip(feature_names, coefs), key=lambda x: abs(x[1]), reverse=True)
+    print(f"\nFeature importance (Ridge coefficients):")
+    for name, coef in importance:
+        print(f"  {name:<20s} {coef:+.4f}")
 
-    # Save weights
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    model.save_weights(save_path)
-    print(f"\nModel saved to {save_path}")
+    # === Approach 2: Small neural net (if enough data) ===
+    nn_corr = None
+    if len(y) >= 20:
+        import keras
+        from keras.layers import Input, Dense, Dropout
+        from keras.models import Model as KerasModel
+        from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
-    # Print final metrics
-    val_loss = min(history.history.get('val_loss', [float('inf')]))
-    print(f"Best validation MSE: {val_loss:.6f} (RMSE: {np.sqrt(val_loss):.4f})")
+        inp = Input(shape=(X_norm.shape[1],))
+        h = Dense(32, activation='relu')(inp)
+        h = Dropout(0.3)(h)
+        h = Dense(16, activation='relu')(h)
+        h = Dropout(0.2)(h)
+        out = Dense(1, activation='linear')(h)
+        nn_model = KerasModel(inputs=inp, outputs=out)
+        nn_model.compile(optimizer='adam', loss='mse')
 
-    # Quick evaluation: predict on all data and show correlation
-    predictions = model.predict([X_seg, X_unc], verbose=0).flatten()
-    correlation = np.corrcoef(y, predictions)[0, 1]
-    print(f"\nFull dataset correlation (Pearson r): {correlation:.4f}")
+        # LOO for neural net too (slower but honest)
+        nn_loo_preds = np.zeros_like(y)
+        for i in range(len(y)):
+            mask = np.ones(len(y), dtype=bool)
+            mask[i] = False
+            nn_model.fit(X_norm[mask], y[mask],
+                         epochs=200, batch_size=max(1, len(y) // 4),
+                         verbose=0, validation_split=0.15,
+                         callbacks=[EarlyStopping(patience=20, restore_best_weights=True)])
+            nn_loo_preds[i] = nn_model.predict(X_norm[i:i+1], verbose=0)[0, 0]
+
+        nn_corr = np.corrcoef(y, nn_loo_preds)[0, 1]
+        nn_rmse = np.sqrt(np.mean((y - nn_loo_preds) ** 2))
+
+        print(f"\n=== Small Neural Net (LOO cross-validated) ===")
+        print(f"Pearson r: {nn_corr:.4f}")
+        print(f"RMSE: {nn_rmse:.4f}")
+
+        # Train final NN on all data
+        nn_model.fit(X_norm, y, epochs=200,
+                     batch_size=max(1, len(y) // 4), verbose=0,
+                     callbacks=[EarlyStopping(patience=30, restore_best_weights=True)])
+
+    # Pick best approach
+    best = 'nn' if (nn_corr is not None and nn_corr > loo_corr) else 'ridge'
+    print(f"\n=== Best approach: {best} ===")
+
+    # Save model + normalization params
+    save_data = {
+        'X_mean': X_mean, 'X_std': X_std,
+        'feature_names': feature_names,
+        'best_approach': best,
+        'ridge_coef': ridge.coef_,
+        'ridge_intercept': ridge.intercept_,
+        'ridge_alpha': ridge.alpha_,
+    }
+    np.savez(save_path.replace('.h5', '_features.npz'), **save_data)
+    print(f"Feature model saved to {save_path.replace('.h5', '_features.npz')}")
+
+    if best == 'nn':
+        nn_model.save_weights(save_path)
+        print(f"NN weights saved to {save_path}")
+
+    # Per-subject results (using LOO predictions for honest eval)
+    preds = loo_preds if best == 'ridge' else nn_loo_preds
+    print(f"\nPer-subject predictions vs actual (LOO):")
+    print(f"{'Subject':<20} {'Actual':>8} {'Predicted':>10} {'Error':>8}")
+    print("-" * 48)
+    for sid, actual, pred in sorted(zip(subject_ids, y, preds), key=lambda x: x[1]):
+        print(f"{sid:<20} {actual:>8.4f} {pred:>10.4f} {pred-actual:>+8.4f}")
     print(f"\nPer-subject predictions vs actual:")
     print(f"{'Subject':<20} {'Actual':>8} {'Predicted':>10}")
     print("-" * 40)

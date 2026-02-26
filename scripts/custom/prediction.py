@@ -28,9 +28,9 @@ FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-det
 
 # === TTA UNCERTAINTY OPTIONS ===
 ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
-N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
+N_TTA_AUGMENTATIONS = 10            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
-TTA_STRENGTH = 0.75                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
+TTA_STRENGTH = 0.8                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
 TTA_QUALITY_MODEL_WEIGHTS = None    # Path to trained quality prediction model (None = skip)
 
 # Store results across all models for summary

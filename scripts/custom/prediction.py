@@ -23,12 +23,12 @@ from claustrum_uncertainty import predict_with_tta
 
 
 # === OPTIONS ===
-DELETE_TMP_PREDICTIONS = False  # Set to True to delete segmentations after evaluation (keeps CSVs)
+DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
 FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
 RERUN_TMP_PREDICTIONS = False
 
 # === TTA UNCERTAINTY OPTIONS ===
-ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
+ENABLE_TTA_UNCERTAINTY = False       # Generate claustrum uncertainty maps via TTA
 N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA

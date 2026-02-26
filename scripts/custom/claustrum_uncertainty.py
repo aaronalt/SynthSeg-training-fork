@@ -432,16 +432,10 @@ def predict_with_tta(path_images,
         sigma_smoothing=sigma_smoothing, flip_indices=flip_indices,
         gradients=False)
 
-    # Build TTA augmentation model (uses actual SynthSeg layers)
-    aug_model = build_tta_augmentation_model(
-        input_shape=model_input_shape,
-        bias_field_std=bias_field_std,
-        bias_scale=bias_scale,
-        noise_std=noise_std,
-        gamma_std=gamma_std)
-    print(f"Built TTA augmentation model "
-          f"(bias_field_std={bias_field_std}, noise_std={noise_std}, "
-          f"gamma_std={gamma_std})")
+    # TTA augmentation model will be built lazily with concrete spatial
+    # dims (BiasFieldCorruption needs known shape for the bias grid).
+    aug_model = None
+    _aug_shape_cache = None
 
     # Load quality prediction model if provided
     quality_model = None
@@ -475,6 +469,20 @@ def predict_with_tta(path_images,
 
         image, aff, h, im_res, shape, pad_idx, crop_idx = preprocess(
             img_path, n_levels, target_res, crop=_crop, min_pad=_min_pad)
+
+        # Build / rebuild aug model when preprocessed shape changes
+        img_shape = list(image.shape[1:])  # concrete (H, W, D, C)
+        if aug_model is None or img_shape != _aug_shape_cache:
+            aug_model = build_tta_augmentation_model(
+                input_shape=img_shape,
+                bias_field_std=bias_field_std,
+                bias_scale=bias_scale,
+                noise_std=noise_std,
+                gamma_std=gamma_std)
+            _aug_shape_cache = img_shape
+            print(f"    Built TTA augmentation model for shape {img_shape} "
+                  f"(bias_field_std={bias_field_std}, noise_std={noise_std}, "
+                  f"gamma_std={gamma_std})")
 
         # TTA forward passes using SynthSeg augmentation layers
         all_posteriors = generate_tta_posteriors(

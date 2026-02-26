@@ -29,10 +29,10 @@ RERUN_TMP_PREDICTIONS = False
 
 # === TTA UNCERTAINTY OPTIONS ===
 ENABLE_TTA_UNCERTAINTY = False       # Generate claustrum uncertainty maps via TTA
-N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
+N_TTA_AUGMENTATIONS = 10            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
-TTA_QUALITY_MODEL_WEIGHTS = None    # Path to trained quality prediction model (None = skip)
+TTA_QUALITY_MODEL_WEIGHTS = '/home/althause/data/weights/quality_model_weights_features.npz'  # Ridge model (.npz) or None to skip
 
 # Store results across all models for summary
 all_model_results = []
@@ -110,7 +110,7 @@ for path_model in model_files:
     exp = model_dir.split('/')[-1]
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
-    path_images = '/home/althause/data/TEST'
+    path_images = '/home/althause/data/TEST/no_gt'
 
     # Determine field strength (manual override or auto-detect)
     if FORCE_FIELD_STRENGTH:

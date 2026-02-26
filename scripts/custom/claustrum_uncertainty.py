@@ -325,134 +325,98 @@ def compute_tta_dice(all_posteriors, labels_segmentation,
 # SECTION 3: QUALITY PREDICTION — 2-SUBNETWORK CNN (3D)
 # ===================================================================
 
-def build_quality_model(roi_size=(64, 64, 64)):
+def extract_quality_features(seg_data, unc_data):
     """
-    Build a 2-branch 3D CNN for Dice quality prediction from
-    (claustrum segmentation map, uncertainty map) inputs.
-
-    Architecture mirrors the 2D model from Sikha et al. (2025),
-    adapted for 3D with same padding to preserve spatial dims.
-
-    Branches: Conv3D(64)->Pool -> Conv3D(64)->Pool -> Conv3D(32)->Pool
-              -> Conv3D(32)->Pool -> Conv3D(16)
-    Merge -> Flatten -> Dense(128) -> Dense(128) -> Dense(1, linear)
+    Extract summary statistics from a segmentation + uncertainty map pair.
+    Used by the ridge regression quality model to predict Dice.
 
     Args:
-        roi_size: spatial dimensions of input ROI (H, W, D)
+        seg_data: 3D int array (segmentation labels)
+        unc_data: 3D float array (entropy/uncertainty map, same shape)
 
     Returns:
-        Compiled Keras Model
+        1-D numpy array of 12 features
     """
-    from keras.layers import (Input, Conv3D, MaxPool3D,
-                              Flatten, Dense, concatenate)
+    from scipy.ndimage import binary_dilation, binary_erosion
 
-    input_shape = (*roi_size, 1)
-    filters = [64, 64, 32, 32, 16]
+    claustrum_mask = np.isin(seg_data, CLAUSTRUM_LABELS)
+    cl_volume = claustrum_mask.sum()
+    total_volume = seg_data.size
+    cl_fraction = cl_volume / total_volume if total_volume > 0 else 0
 
-    seg_input = Input(shape=input_shape, name='segmentation_input')
-    unc_input = Input(shape=input_shape, name='uncertainty_input')
-
-    def branch(x):
-        for i, nf in enumerate(filters):
-            x = Conv3D(nf, (3, 3, 3), activation='relu', padding='same')(x)
-            if i < len(filters) - 1:  # MaxPool on all but last layer
-                x = MaxPool3D(pool_size=(2, 2, 2))(x)
-        return x
-
-    seg_branch = branch(seg_input)
-    unc_branch = branch(unc_input)
-
-    merged = concatenate([seg_branch, unc_branch])
-    flat = Flatten()(merged)
-    dense = Dense(128, activation='relu')(flat)
-    dense = Dense(128, activation='relu')(dense)
-    output = Dense(1, activation='linear', name='dice_prediction')(dense)
-
-    model = Model(inputs=[seg_input, unc_input], outputs=output)
-    model.compile(loss='mean_squared_error', optimizer='adam')
-    return model
-
-
-def extract_claustrum_roi(volume, seg_map, roi_size=(64, 64, 64),
-                          claustrum_labels=None, padding=10):
-    """
-    Crop and resize a region around the predicted claustrum.
-
-    Args:
-        volume: 3D array (H, W, D) — the map to crop
-        seg_map: Segmentation map of same spatial shape
-        roi_size: Fixed output size
-        claustrum_labels: Labels identifying claustrum
-        padding: Voxels of context around bounding box
-
-    Returns:
-        Cropped and resized volume of shape roi_size
-    """
-    if claustrum_labels is None:
-        claustrum_labels = CLAUSTRUM_LABELS
-
-    mask = np.isin(seg_map, claustrum_labels)
-
-    if mask.any():
-        coords = np.where(mask)
-        mins = [max(0, int(c.min()) - padding) for c in coords]
-        maxs = [min(s, int(c.max()) + padding + 1)
-                for c, s in zip(coords, volume.shape[:3])]
-        cropped = volume[mins[0]:maxs[0], mins[1]:maxs[1], mins[2]:maxs[2]]
+    if cl_volume > 0:
+        unc_in_cl = unc_data[claustrum_mask]
+        unc_mean_cl = unc_in_cl.mean()
+        unc_std_cl = unc_in_cl.std()
+        unc_max_cl = unc_in_cl.max()
+        unc_median_cl = float(np.median(unc_in_cl))
+        unc_high_frac = float((unc_in_cl > np.percentile(unc_data, 90)).mean())
     else:
-        # Fallback: center crop
-        center = [s // 2 for s in volume.shape[:3]]
-        slices = tuple(
-            slice(max(0, c - r // 2), min(s, c + r // 2))
-            for c, r, s in zip(center, roi_size, volume.shape[:3]))
-        cropped = volume[slices]
+        unc_mean_cl = unc_std_cl = unc_max_cl = unc_median_cl = 0.0
+        unc_high_frac = 1.0
 
-    # Resize to fixed ROI
-    if cropped.shape[:3] != roi_size:
-        zf = [r / max(c, 1) for r, c in zip(roi_size, cropped.shape[:3])]
-        cropped = zoom(cropped.astype(np.float32), zf, order=1)
+    dilated = binary_dilation(claustrum_mask, iterations=2)
+    boundary = dilated & ~claustrum_mask
+    if boundary.sum() > 0:
+        unc_boundary_mean = unc_data[boundary].mean()
+        unc_boundary_max = unc_data[boundary].max()
+    else:
+        unc_boundary_mean = unc_boundary_max = 0.0
 
-    return cropped.astype(np.float32)
+    unc_global_mean = unc_data.mean()
+    unc_global_std = unc_data.std()
+
+    eroded = binary_erosion(claustrum_mask, iterations=1)
+    surface_voxels = claustrum_mask.sum() - eroded.sum()
+    compactness = surface_voxels / max(cl_volume, 1)
+
+    return np.array([
+        cl_volume, cl_fraction, compactness,
+        unc_mean_cl, unc_std_cl, unc_max_cl, unc_median_cl, unc_high_frac,
+        unc_boundary_mean, unc_boundary_max,
+        unc_global_mean, unc_global_std,
+    ], dtype=np.float32)
 
 
-def train_quality_model(seg_maps, uncertainty_maps, dice_scores,
-                        roi_size=(64, 64, 64), epochs=50, batch_size=4,
-                        val_split=0.2, save_path=None):
+def load_quality_model(weights_path):
     """
-    Train the 2-subnetwork quality prediction model.
+    Load a trained ridge regression quality model from .npz file.
 
     Args:
-        seg_maps: list of 3D binary claustrum segmentation arrays
-        uncertainty_maps: list of 3D uncertainty arrays (same shape)
-        dice_scores: list/array of ground-truth Dice scores
-        roi_size: ROI size (must match build_quality_model)
-        epochs, batch_size, val_split: training hyperparameters
-        save_path: path to save trained weights (.h5)
+        weights_path: Path to .npz file saved by train_quality_model.py
 
     Returns:
-        Trained Keras Model
+        dict with keys: coef, intercept, X_mean, X_std
+        or None if file not found
     """
-    from keras.callbacks import EarlyStopping
+    if not weights_path or not os.path.isfile(weights_path):
+        return None
 
-    model = build_quality_model(roi_size)
+    data = np.load(weights_path, allow_pickle=True)
+    return dict(
+        coef=data['ridge_coef'],
+        intercept=float(data['ridge_intercept']),
+        X_mean=data['X_mean'],
+        X_std=data['X_std'],
+    )
 
-    X_seg = np.array(seg_maps)[..., np.newaxis]
-    X_unc = np.array(uncertainty_maps)[..., np.newaxis]
-    y = np.array(dice_scores, dtype=np.float32)
 
-    early_stop = EarlyStopping(monitor='val_loss', patience=10,
-                               restore_best_weights=True)
+def predict_quality(seg_data, unc_data, quality_params):
+    """
+    Predict Dice score for a single subject using the ridge model.
 
-    model.fit([X_seg, X_unc], y,
-              batch_size=batch_size, epochs=epochs,
-              validation_split=val_split, callbacks=[early_stop], verbose=1)
+    Args:
+        seg_data: 3D int array (segmentation)
+        unc_data: 3D float array (entropy map)
+        quality_params: dict from load_quality_model()
 
-    if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        model.save_weights(save_path)
-        print(f"Quality model saved to {save_path}")
-
-    return model
+    Returns:
+        float: predicted Dice score
+    """
+    features = extract_quality_features(seg_data, unc_data)
+    X_norm = (features - quality_params['X_mean']) / (quality_params['X_std'] + 1e-8)
+    pred = float(X_norm @ quality_params['coef'] + quality_params['intercept'])
+    return np.clip(pred, 0.0, 1.0)
 
 
 # ===================================================================
@@ -483,8 +447,7 @@ def predict_with_tta(path_images,
                      gamma_std=0.5,
                      tta_strength=0.25,
                      uncertainty_type='entropy',
-                     quality_model_weights=None,
-                     quality_roi_size=(64, 64, 64)):
+                     quality_model_weights=None):
     """
     Full TTA pipeline: for each image, generate N augmented predictions
     using the actual SynthSeg augmentation layers, compute claustrum-
@@ -546,10 +509,8 @@ def predict_with_tta(path_images,
         gradients=False)
 
     # Load quality prediction model if provided
-    quality_model = None
-    if quality_model_weights and os.path.isfile(quality_model_weights):
-        quality_model = build_quality_model(quality_roi_size)
-        quality_model.load_weights(quality_model_weights)
+    quality_params = load_quality_model(quality_model_weights)
+    if quality_params is not None:
         print(f"Loaded quality prediction model from {quality_model_weights}")
 
     # Output directories
@@ -647,17 +608,10 @@ def predict_with_tta(path_images,
             volumes=volumes, predicted_dice=None,
         )
 
-        # Quality prediction (if model available)
-        if quality_model is not None:
-            cl_seg_binary = np.isin(seg, CLAUSTRUM_LABELS).astype(np.float32)
-            seg_roi = extract_claustrum_roi(
-                cl_seg_binary, seg, quality_roi_size)
-            unc_roi = extract_claustrum_roi(
-                unc_map, seg, quality_roi_size)
-            pred_dice = quality_model.predict(
-                [seg_roi[np.newaxis, ..., np.newaxis],
-                 unc_roi[np.newaxis, ..., np.newaxis]], verbose=0)
-            result['predicted_dice'] = float(pred_dice[0, 0])
+        # Quality prediction (ridge regression on extracted features)
+        if quality_params is not None:
+            result['predicted_dice'] = predict_quality(
+                seg, unc_map, quality_params)
             print(f"    Predicted Dice: {result['predicted_dice']:.4f}")
 
         results.append(result)

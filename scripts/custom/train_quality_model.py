@@ -26,7 +26,7 @@ import nibabel as nib
 from scipy.ndimage import zoom as nd_zoom
 from glob import glob
 
-from claustrum_uncertainty import build_quality_model, CLAUSTRUM_LABELS
+from claustrum_uncertainty import CLAUSTRUM_LABELS
 
 
 def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
@@ -327,13 +327,8 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
     print("-" * 48)
     for sid, actual, pred in sorted(zip(subject_ids, y, preds), key=lambda x: x[1]):
         print(f"{sid:<20} {actual:>8.4f} {pred:>10.4f} {pred-actual:>+8.4f}")
-    print(f"\nPer-subject predictions vs actual:")
-    print(f"{'Subject':<20} {'Actual':>8} {'Predicted':>10}")
-    print("-" * 40)
-    for sid, actual, pred in zip(subject_ids, y, predictions):
-        print(f"{sid:<20} {actual:>8.4f} {pred:>10.4f}")
 
-    return model
+    return ridge
 
 
 if __name__ == '__main__':

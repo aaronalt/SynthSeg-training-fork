@@ -502,30 +502,36 @@ def predict_with_tta(path_images,
             keep_biggest_component=keep_biggest_component,
             aff=aff, im_res=im_res, topology_classes=topology_classes)
 
-        # Map uncertainty to original image space
-        unc_map = unc_results[uncertainty_type]
-        unc_map = edit_volumes.crop_volume_with_idx(
-            unc_map, pad_idx, n_dims=3, return_copy=False)
-        if crop_idx is not None:
-            full_unc = np.zeros(shape, dtype=np.float32)
-            full_unc[crop_idx[0]:crop_idx[3],
+        # Helper: map a volume from cropped/padded space to original space
+        def _to_original_space(vol):
+            vol = edit_volumes.crop_volume_with_idx(
+                vol, pad_idx, n_dims=3, return_copy=False)
+            if crop_idx is not None:
+                full = np.zeros(shape, dtype=np.float32)
+                full[crop_idx[0]:crop_idx[3],
                      crop_idx[1]:crop_idx[4],
-                     crop_idx[2]:crop_idx[5]] = unc_map
-            unc_map = full_unc
-        unc_map = edit_volumes.align_volume_to_ref(
-            unc_map, np.eye(4), aff, n_dims=n_dims, return_copy=False)
+                     crop_idx[2]:crop_idx[5]] = vol
+                vol = full
+            return edit_volumes.align_volume_to_ref(
+                vol, np.eye(4), aff, n_dims=n_dims, return_copy=False)
+
+        unc_map = _to_original_space(unc_results[uncertainty_type])
+        conf_map = _to_original_space(unc_results['confidence'])
 
         # Save outputs
         seg_path = os.path.join(
             tta_seg_dir, f'{basename}_tta_seg.nii.gz')
         unc_path = os.path.join(
             unc_dir, f'{basename}_{uncertainty_type}.nii.gz')
+        conf_path = os.path.join(
+            unc_dir, f'{basename}_confidence.nii.gz')
         utils.save_volume(seg.astype('int32'), aff, h, seg_path)
         utils.save_volume(unc_map.astype('float32'), aff, h, unc_path)
+        utils.save_volume(conf_map.astype('float32'), aff, h, conf_path)
 
         result = dict(
             path=img_path, basename=basename,
-            seg_path=seg_path, uncertainty_path=unc_path,
+            seg_path=seg_path, uncertainty_path=unc_path, confidence_path=conf_path,
             uncertainty_type=uncertainty_type,
             volumes=volumes, predicted_dice=None,
         )

@@ -23,14 +23,15 @@ from claustrum_uncertainty import predict_with_tta
 
 
 # === OPTIONS ===
-DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
+DELETE_TMP_PREDICTIONS = False  # Set to True to delete segmentations after evaluation (keeps CSVs)
 FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
+RERUN_TMP_PREDICTIONS = False
 
 # === TTA UNCERTAINTY OPTIONS ===
 ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
-N_TTA_AUGMENTATIONS = 10            # Number of augmented predictions per image
+N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
-TTA_STRENGTH = 0.8                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
+TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
 TTA_QUALITY_MODEL_WEIGHTS = None    # Path to trained quality prediction model (None = skip)
 
 # Store results across all models for summary
@@ -109,7 +110,7 @@ for path_model in model_files:
     exp = model_dir.split('/')[-1]
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
-    path_images = '/home/althause/data/TEST'
+    path_images = '/home/althause/data/TEST/trainingset'
 
     # Determine field strength (manual override or auto-detect)
     if FORCE_FIELD_STRENGTH:
@@ -344,9 +345,8 @@ if all_model_results:
         print(f"\nBest epoch: {best_epoch} (Dice: {epoch_summary['mean'].max():.4f})")
 
     print(f"\nFull results saved to: {summary_path}")
-    RERUN_TMP_PREDICTIONS = False
     # Re-run prediction for best model and keep outputs
-    if DELETE_TMP_PREDICTIONS or RERUN_TMP_PREDICTIONS:
+    if RERUN_TMP_PREDICTIONS:
         if model_dice_scores:
             best_model_path = max(model_dice_scores, key=model_dice_scores.get)
             best_model = os.path.basename(best_model_path)

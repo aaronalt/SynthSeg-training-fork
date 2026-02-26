@@ -23,23 +23,29 @@ import re
 import numpy as np
 import pandas as pd
 import nibabel as nib
-from scipy.ndimage import zoom as nd_zoom
 from glob import glob
 
-from claustrum_uncertainty import CLAUSTRUM_LABELS
+from claustrum_uncertainty import CLAUSTRUM_LABELS, extract_quality_features
 
 
 def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
     """
     Load TTA outputs and match with actual Dice scores.
 
+    Supports two modes:
+    - Single TTA dir: tta_dir contains tta_segmentations/ and uncertainty_maps/
+    - Parent seg dir: tta_dir is a parent containing multiple checkpoint dirs,
+      each with a tta_uncertainty/ subdirectory. Matches Dice scores per
+      checkpoint using the prediction_path column in the CSV.
+
     Args:
-        tta_dir: Directory containing tta_segmentations/ and uncertainty_maps/
-        dice_csv: Path to CSV with columns: subject_id, hemisphere, dice
-        roi_size: Fixed ROI size for the quality model
+        tta_dir: Single TTA dir, or parent seg dir with multiple checkpoints
+        dice_csv: Path to CSV with columns: subject_id, hemisphere, dice,
+                  and optionally prediction_path (for multi-checkpoint matching)
+        roi_size: Unused (kept for API compatibility)
 
     Returns:
-        seg_rois, unc_rois, dice_scores, subject_ids
+        features, dice_scores, subject_ids
     """
     # Load Dice scores
     df = pd.read_csv(dice_csv)
@@ -47,164 +53,115 @@ def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
     print(f"Columns: {list(df.columns)}")
     print(f"Dice range: {df['dice'].min():.4f} - {df['dice'].max():.4f}")
 
-    # Build lookup: (subject_id, hemisphere) -> dice
+    # Discover TTA directories
+    # Case 1: tta_dir itself has tta_segmentations/
+    # Case 2: tta_dir is parent, scan for */tta_uncertainty/tta_segmentations/
+    tta_dirs = []
+    if os.path.isdir(os.path.join(tta_dir, 'tta_segmentations')):
+        tta_dirs.append(tta_dir)
+    else:
+        # Scan subdirectories for tta_uncertainty folders
+        for subdir in sorted(os.listdir(tta_dir)):
+            candidate = os.path.join(tta_dir, subdir, 'tta_uncertainty')
+            if os.path.isdir(os.path.join(candidate, 'tta_segmentations')):
+                tta_dirs.append(candidate)
+
+    print(f"\nFound {len(tta_dirs)} TTA output directories")
+
+    # Build Dice lookup
+    # If prediction_path column exists, use (prediction_path, subject_id, hemi) as key
+    # to match the correct Dice for each checkpoint
+    has_pred_path = 'prediction_path' in df.columns
     dice_lookup = {}
     for _, row in df.iterrows():
-        key = (str(row['subject_id']), row['hemisphere'].lower())
-        dice_lookup[key] = row['dice']
+        sid = str(row['subject_id'])
+        hemi = row['hemisphere'].lower()
+        dice = row['dice']
+        if has_pred_path:
+            pred_path = str(row['prediction_path'])
+            dice_lookup[(pred_path, sid, hemi)] = dice
+        # Always add a simple key as fallback
+        simple_key = (sid, hemi)
+        if simple_key not in dice_lookup:
+            dice_lookup[simple_key] = dice
 
-    # Find TTA outputs
-    seg_dir = os.path.join(tta_dir, 'tta_segmentations')
-    unc_dir = os.path.join(tta_dir, 'uncertainty_maps')
-
-    seg_files = sorted(glob(os.path.join(seg_dir, '*_tta_seg.nii.gz')))
-    print(f"\nFound {len(seg_files)} TTA segmentations in {seg_dir}")
-
-    seg_rois = []
-    unc_rois = []
+    all_features = []
     dice_scores = []
     subject_ids = []
     matched = 0
     unmatched = 0
 
-    for seg_path in seg_files:
-        # Extract subject_id and hemisphere from filename
-        # Filename format: sub-XXXX.lh.crop_tta_seg.nii.gz
-        basename = os.path.basename(seg_path).replace('_tta_seg.nii.gz', '')
-        match = re.search(r'(\d+).*?(lh|rh)', basename, re.IGNORECASE)
-        if not match:
-            print(f"  Skipping (no ID/hemi match): {basename}")
-            continue
+    for tta_d in tta_dirs:
+        seg_dir = os.path.join(tta_d, 'tta_segmentations')
+        unc_dir = os.path.join(tta_d, 'uncertainty_maps')
 
-        subject_id = match.group(1)
-        hemi = match.group(2).lower()
+        # Derive the prediction_path for this checkpoint
+        # tta_d is like .../dice_finetune_055_100/tta_uncertainty
+        # prediction_path is .../dice_finetune_055_100
+        checkpoint_path = os.path.dirname(tta_d)
+        checkpoint_name = os.path.basename(checkpoint_path)
 
-        # Look up Dice
-        key = (subject_id, hemi)
-        if key not in dice_lookup:
-            print(f"  No Dice score for {subject_id} {hemi}, skipping")
-            unmatched += 1
-            continue
+        seg_files = sorted(glob(os.path.join(seg_dir, '*_tta_seg.nii.gz')))
+        print(f"\n  [{checkpoint_name}] {len(seg_files)} TTA segmentations")
 
-        dice = dice_lookup[key]
+        for seg_path in seg_files:
+            basename = os.path.basename(seg_path).replace('_tta_seg.nii.gz', '')
+            match = re.search(r'(\d+).*?(lh|rh)', basename, re.IGNORECASE)
+            if not match:
+                continue
 
-        # Find corresponding entropy map
-        entropy_path = os.path.join(unc_dir, f'{basename}_entropy.nii.gz')
-        if not os.path.isfile(entropy_path):
-            # Try other uncertainty types
-            for utype in ['entropy', 'variance', 'confidence', 'mutual_information']:
-                alt = os.path.join(unc_dir, f'{basename}_{utype}.nii.gz')
-                if os.path.isfile(alt):
-                    entropy_path = alt
-                    break
-            else:
-                print(f"  No uncertainty map for {basename}, skipping")
+            subject_id = match.group(1)
+            hemi = match.group(2).lower()
+
+            # Look up Dice — try checkpoint-specific key first
+            dice = None
+            if has_pred_path:
+                dice = dice_lookup.get((checkpoint_path, subject_id, hemi))
+            if dice is None:
+                dice = dice_lookup.get((subject_id, hemi))
+            if dice is None:
+                print(f"    No Dice for {subject_id} {hemi}, skipping")
                 unmatched += 1
                 continue
 
-        # Load volumes (already cropped around claustrum)
-        seg_data = nib.load(seg_path).get_fdata().astype(np.int32)
-        unc_data = nib.load(entropy_path).get_fdata().astype(np.float32)
+            # Find entropy map
+            entropy_path = os.path.join(unc_dir, f'{basename}_entropy.nii.gz')
+            if not os.path.isfile(entropy_path):
+                for utype in ['entropy', 'variance', 'confidence', 'mutual_information']:
+                    alt = os.path.join(unc_dir, f'{basename}_{utype}.nii.gz')
+                    if os.path.isfile(alt):
+                        entropy_path = alt
+                        break
+                else:
+                    unmatched += 1
+                    continue
 
-        # Create binary claustrum mask
-        cl_binary = np.isin(seg_data, CLAUSTRUM_LABELS).astype(np.float32)
+            # Load and extract features (hemisphere-aware)
+            seg_data = nib.load(seg_path).get_fdata().astype(np.int32)
+            unc_data = nib.load(entropy_path).get_fdata().astype(np.float32)
+            features = extract_quality_features(seg_data, unc_data, hemisphere=hemi)
 
-        # Resize to fixed input size (images are already claustrum-cropped)
-        def resize_to_roi(vol, target_size):
-            zf = [t / max(s, 1) for t, s in zip(target_size, vol.shape[:3])]
-            return nd_zoom(vol.astype(np.float32), zf, order=1)
+            all_features.append(features)
+            dice_scores.append(dice)
+            subject_ids.append(f"{checkpoint_name}/{subject_id}_{hemi}")
+            matched += 1
 
-        seg_roi = resize_to_roi(cl_binary, roi_size)
-        unc_roi = resize_to_roi(unc_data, roi_size)
+    print(f"\nTotal matched: {matched}, Unmatched: {unmatched}")
+    if matched > 0:
+        print(f"Dice distribution: mean={np.mean(dice_scores):.4f}, "
+              f"std={np.std(dice_scores):.4f}, "
+              f"range=[{np.min(dice_scores):.4f}, {np.max(dice_scores):.4f}]")
 
-        seg_rois.append(seg_roi)
-        unc_rois.append(unc_roi)
-        dice_scores.append(dice)
-        subject_ids.append(f"{subject_id}_{hemi}")
-        matched += 1
+    return (np.array(all_features), np.array(dice_scores), subject_ids)
 
-    print(f"\nMatched: {matched}, Unmatched: {unmatched}")
-    print(f"Dice distribution: mean={np.mean(dice_scores):.4f}, "
-          f"std={np.std(dice_scores):.4f}")
-
-    return (np.array(seg_rois), np.array(unc_rois),
-            np.array(dice_scores), subject_ids)
-
-
-def extract_features(seg_rois, unc_rois):
-    """
-    Extract summary statistics from seg + uncertainty maps.
-    These are the features the quality model learns from.
-
-    For ~50 samples, hand-crafted features + simple model vastly
-    outperforms a 3D CNN which would have millions of parameters.
-    """
-    features = []
-    for i in range(len(seg_rois)):
-        seg = seg_rois[i]
-        unc = unc_rois[i]
-        claustrum_mask = seg > 0.5
-
-        # Segmentation features
-        cl_volume = claustrum_mask.sum()
-        total_volume = seg.size
-        cl_fraction = cl_volume / total_volume if total_volume > 0 else 0
-
-        # Uncertainty features (within claustrum)
-        if cl_volume > 0:
-            unc_in_cl = unc[claustrum_mask]
-            unc_mean_cl = unc_in_cl.mean()
-            unc_std_cl = unc_in_cl.std()
-            unc_max_cl = unc_in_cl.max()
-            unc_median_cl = np.median(unc_in_cl)
-            # Fraction of claustrum with high uncertainty
-            unc_high_frac = (unc_in_cl > np.percentile(unc, 90)).mean()
-        else:
-            unc_mean_cl = unc_std_cl = unc_max_cl = unc_median_cl = 0.0
-            unc_high_frac = 1.0
-
-        # Uncertainty features (boundary: dilated mask - mask)
-        from scipy.ndimage import binary_dilation
-        dilated = binary_dilation(claustrum_mask, iterations=2)
-        boundary = dilated & ~claustrum_mask
-        if boundary.sum() > 0:
-            unc_boundary_mean = unc[boundary].mean()
-            unc_boundary_max = unc[boundary].max()
-        else:
-            unc_boundary_mean = unc_boundary_max = 0.0
-
-        # Global uncertainty features
-        unc_global_mean = unc.mean()
-        unc_global_std = unc.std()
-
-        # Compactness: surface area / volume ratio (approximate)
-        from scipy.ndimage import binary_erosion
-        eroded = binary_erosion(claustrum_mask, iterations=1)
-        surface_voxels = claustrum_mask.sum() - eroded.sum()
-        compactness = surface_voxels / max(cl_volume, 1)
-
-        features.append([
-            cl_volume, cl_fraction, compactness,
-            unc_mean_cl, unc_std_cl, unc_max_cl, unc_median_cl, unc_high_frac,
-            unc_boundary_mean, unc_boundary_max,
-            unc_global_mean, unc_global_std,
-        ])
-
-    feature_names = [
-        'cl_volume', 'cl_fraction', 'compactness',
-        'unc_mean_cl', 'unc_std_cl', 'unc_max_cl', 'unc_median_cl', 'unc_high_frac',
-        'unc_boundary_mean', 'unc_boundary_max',
-        'unc_global_mean', 'unc_global_std',
-    ]
-    return np.array(features, dtype=np.float32), feature_names
 
 
 def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
           epochs=100, batch_size=4, val_split=0.2):
     """Train the quality model and save weights."""
 
-    # Load data
-    seg_rois, unc_rois, dice_scores, subject_ids = load_and_match_data(
+    # Load data (features already extracted per-hemisphere)
+    X, dice_scores, subject_ids = load_and_match_data(
         tta_dir, dice_csv, roi_size)
 
     # Filter out Dice=0 (likely GT matching failures, not real scores)
@@ -212,8 +169,7 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
     n_removed = (~valid).sum()
     if n_removed > 0:
         print(f"\nRemoved {n_removed} samples with Dice~0 (likely GT matching failures)")
-        seg_rois = seg_rois[valid]
-        unc_rois = unc_rois[valid]
+        X = X[valid]
         dice_scores = dice_scores[valid]
         subject_ids = [s for s, v in zip(subject_ids, valid) if v]
 
@@ -223,9 +179,13 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
             print("Too few samples, aborting.")
             return None
 
-    # Extract features instead of using raw 3D volumes
-    X, feature_names = extract_features(seg_rois, unc_rois)
     y = dice_scores.astype(np.float32)
+    feature_names = [
+        'cl_volume', 'cl_fraction', 'compactness',
+        'unc_mean_cl', 'unc_std_cl', 'unc_max_cl', 'unc_median_cl', 'unc_high_frac',
+        'unc_boundary_mean', 'unc_boundary_max',
+        'unc_global_mean', 'unc_global_std',
+    ]
 
     print(f"\nFeature matrix: {X.shape} ({len(feature_names)} features)")
     print(f"Features: {feature_names}")

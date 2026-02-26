@@ -22,6 +22,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 
+import re
 import numpy as np
 import keras
 import keras.backend as K
@@ -325,7 +326,7 @@ def compute_tta_dice(all_posteriors, labels_segmentation,
 # SECTION 3: QUALITY PREDICTION — 2-SUBNETWORK CNN (3D)
 # ===================================================================
 
-def extract_quality_features(seg_data, unc_data):
+def extract_quality_features(seg_data, unc_data, hemisphere=None):
     """
     Extract summary statistics from a segmentation + uncertainty map pair.
     Used by the ridge regression quality model to predict Dice.
@@ -333,13 +334,22 @@ def extract_quality_features(seg_data, unc_data):
     Args:
         seg_data: 3D int array (segmentation labels)
         unc_data: 3D float array (entropy/uncertainty map, same shape)
+        hemisphere: 'lh' or 'rh' to restrict to one hemisphere.
+                    None = use both (not recommended for cropped images).
 
     Returns:
         1-D numpy array of 12 features
     """
     from scipy.ndimage import binary_dilation, binary_erosion
 
-    claustrum_mask = np.isin(seg_data, CLAUSTRUM_LABELS)
+    if hemisphere == 'lh':
+        target_labels = [138]
+    elif hemisphere == 'rh':
+        target_labels = [139]
+    else:
+        target_labels = CLAUSTRUM_LABELS
+
+    claustrum_mask = np.isin(seg_data, target_labels)
     cl_volume = claustrum_mask.sum()
     total_volume = seg_data.size
     cl_fraction = cl_volume / total_volume if total_volume > 0 else 0
@@ -401,7 +411,7 @@ def load_quality_model(weights_path):
     )
 
 
-def predict_quality(seg_data, unc_data, quality_params):
+def predict_quality(seg_data, unc_data, quality_params, hemisphere=None):
     """
     Predict Dice score for a single subject using the ridge model.
 
@@ -409,11 +419,12 @@ def predict_quality(seg_data, unc_data, quality_params):
         seg_data: 3D int array (segmentation)
         unc_data: 3D float array (entropy map)
         quality_params: dict from load_quality_model()
+        hemisphere: 'lh' or 'rh' — restricts features to one hemisphere
 
     Returns:
         float: predicted Dice score
     """
-    features = extract_quality_features(seg_data, unc_data)
+    features = extract_quality_features(seg_data, unc_data, hemisphere=hemisphere)
     X_norm = (features - quality_params['X_mean']) / (quality_params['X_std'] + 1e-8)
     pred = float(X_norm @ quality_params['coef'] + quality_params['intercept'])
     return np.clip(pred, 0.0, 1.0)
@@ -610,9 +621,13 @@ def predict_with_tta(path_images,
 
         # Quality prediction (ridge regression on extracted features)
         if quality_params is not None:
+            # Detect hemisphere from filename
+            hemi_match = re.search(r'\b(lh|rh)\b', basename, re.IGNORECASE)
+            hemi = hemi_match.group(1).lower() if hemi_match else None
             result['predicted_dice'] = predict_quality(
-                seg, unc_map, quality_params)
-            print(f"    Predicted Dice: {result['predicted_dice']:.4f}")
+                seg, unc_map, quality_params, hemisphere=hemi)
+            print(f"    Predicted Dice ({hemi or 'both'}): "
+                  f"{result['predicted_dice']:.4f}")
 
         results.append(result)
 

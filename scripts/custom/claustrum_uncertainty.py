@@ -43,11 +43,18 @@ CLAUSTRUM_LABELS = [138, 139]  # LH, RH
 # ===================================================================
 
 def apply_tta_augmentation(image, bias_field_std=0.3, bias_scale=0.025,
-                           noise_std=100, gamma_std=0.5):
+                           noise_std=100, gamma_std=0.5, tta_strength=0.25):
     """
-    Apply the same intensity augmentation chain used during SynthSeg
-    training (labels_to_image_model.py lines 186-195), implemented in
-    numpy so it works outside the training graph.
+    Apply intensity augmentations matching the SynthSeg training chain,
+    scaled by tta_strength for test-time use.
+
+    During training, full-strength augmentation teaches robustness.
+    At test time, we want *gentle* perturbations that probe the model's
+    decision boundaries without overwhelming the signal.
+
+    tta_strength=1.0 matches training intensity (too aggressive for TTA).
+    tta_strength=0.25 (default) applies 25% of training augmentation —
+    enough to reveal boundary uncertainty without destroying predictions.
 
     Chain:
         1. Bias field corruption — smooth multiplicative field
@@ -63,11 +70,18 @@ def apply_tta_augmentation(image, bias_field_std=0.3, bias_scale=0.025,
         image: (1, H, W, D, C) numpy array, values in [0, 1]
         bias_field_std, bias_scale, noise_std, gamma_std: augmentation
             parameters (should match training config)
+        tta_strength: scale factor (0-1) applied to all augmentation
+            parameters. 1.0 = full training intensity, 0.25 = gentle TTA.
 
     Returns:
         Augmented image, same shape, re-normalised to [0, 1]
     """
     from scipy.ndimage import zoom as nd_zoom
+
+    # Scale augmentation parameters by tta_strength
+    bias_field_std = bias_field_std * tta_strength
+    noise_std = noise_std * tta_strength
+    gamma_std = gamma_std * tta_strength
 
     aug = image.copy().astype(np.float32)
     spatial_shape = aug.shape[1:-1]  # (H, W, D)
@@ -121,7 +135,7 @@ def apply_tta_augmentation(image, bias_field_std=0.3, bias_scale=0.025,
 
 def generate_tta_posteriors(image_preprocessed, seg_net, n_augmentations=10,
                             bias_field_std=0.3, bias_scale=0.025,
-                            noise_std=100, gamma_std=0.5):
+                            noise_std=100, gamma_std=0.5, tta_strength=0.25):
     """
     Run N augmented forward passes through the segmentation model.
 
@@ -148,7 +162,8 @@ def generate_tta_posteriors(image_preprocessed, seg_net, n_augmentations=10,
             bias_field_std=bias_field_std,
             bias_scale=bias_scale,
             noise_std=noise_std,
-            gamma_std=gamma_std)
+            gamma_std=gamma_std,
+            tta_strength=tta_strength)
         post = seg_net.predict(aug, verbose=0)
         all_posteriors.append(np.squeeze(post))
 
@@ -269,10 +284,10 @@ def compute_tta_dice(all_posteriors, labels_segmentation,
                 intersection = np.sum(masks[i] & masks[j])
                 union = np.sum(masks[i]) + np.sum(masks[j])
                 if union == 0:
-                    dices.append(1.0)  # both empty = perfect agreement
+                    continue  # both empty — skip, not meaningful
                 else:
                     dices.append(2.0 * intersection / union)
-        return np.mean(dices) if dices else 0.0
+        return float(np.mean(dices)) if dices else float('nan')
 
     # Per-label Dice
     per_label = {}
@@ -290,12 +305,13 @@ def compute_tta_dice(all_posteriors, labels_segmentation,
     combined_dice = _pairwise_dice(all_masks_combined)
 
     # Full pairwise matrix (combined) for reference
-    pairwise = np.ones((n_aug, n_aug), dtype=np.float32)
+    pairwise = np.full((n_aug, n_aug), np.nan, dtype=np.float32)
+    np.fill_diagonal(pairwise, 1.0)
     for i in range(n_aug):
         for j in range(i + 1, n_aug):
             inter = np.sum(all_masks_combined[i] & all_masks_combined[j])
             total = np.sum(all_masks_combined[i]) + np.sum(all_masks_combined[j])
-            d = 2.0 * inter / total if total > 0 else 1.0
+            d = 2.0 * inter / total if total > 0 else np.nan
             pairwise[i, j] = pairwise[j, i] = d
 
     return dict(
@@ -465,6 +481,7 @@ def predict_with_tta(path_images,
                      bias_field_std=0.3,
                      bias_scale=0.025,
                      gamma_std=0.5,
+                     tta_strength=0.25,
                      uncertainty_type='entropy',
                      quality_model_weights=None,
                      quality_roi_size=(64, 64, 64)):
@@ -567,7 +584,8 @@ def predict_with_tta(path_images,
             bias_field_std=bias_field_std,
             bias_scale=bias_scale,
             noise_std=noise_std,
-            gamma_std=gamma_std)
+            gamma_std=gamma_std,
+            tta_strength=tta_strength)
 
         # Compute claustrum uncertainty
         unc_results = compute_claustrum_uncertainty(

@@ -19,11 +19,18 @@ import shutil
 import pandas as pd
 from pathlib import Path
 import compare_dice_batch as evaluate
+from claustrum_uncertainty import predict_with_tta
 
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
 FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
+
+# === TTA UNCERTAINTY OPTIONS ===
+ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
+N_TTA_AUGMENTATIONS = 10            # Number of augmented predictions per image
+TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
+TTA_QUALITY_MODEL_WEIGHTS = None    # Path to trained quality prediction model (None = skip)
 
 # Store results across all models for summary
 all_model_results = []
@@ -196,6 +203,40 @@ for path_model in model_files:
 
     print("\nPrediction complete!")
 
+    # === TTA UNCERTAINTY ESTIMATION (claustrum-focused) ===
+    tta_results_list = []
+    if ENABLE_TTA_UNCERTAINTY:
+        print(f"\n--- Running TTA uncertainty estimation ({N_TTA_AUGMENTATIONS} augmentations) ---")
+        tta_output_dir = os.path.join(path_segm, 'tta_uncertainty')
+        tta_results_list = predict_with_tta(
+            path_images=path_images,
+            path_model=path_model,
+            labels_segmentation=path_segmentation_labels,
+            output_dir=tta_output_dir,
+            n_neutral_labels=n_neutral_labels,
+            n_augmentations=N_TTA_AUGMENTATIONS,
+            n_levels=n_levels,
+            nb_conv_per_level=nb_conv_per_level,
+            conv_size=conv_size,
+            unet_feat_count=unet_feat_count,
+            feat_multiplier=feat_multiplier,
+            activation=activation,
+            target_res=target_res,
+            cropping=cropping,
+            sigma_smoothing=sigma_smoothing,
+            topology_classes=path_topology_classes,
+            keep_biggest_component=keep_biggest_component,
+            noise_std=trained_model_params.get('noise_std', 100),
+            bias_field_std=trained_model_params.get('bias_field_std', 0.3),
+            bias_scale=trained_model_params.get('bias_scale', 0.025),
+            uncertainty_type=TTA_UNCERTAINTY_TYPE,
+            quality_model_weights=TTA_QUALITY_MODEL_WEIGHTS,
+        )
+        # Clear GPU memory after TTA
+        keras.backend.clear_session()
+        tf.keras.backend.clear_session()
+        print("TTA uncertainty estimation complete.")
+
     # === DICE EVALUATION ===
     path_subj = Path(path_segm)
     for sub in sorted(path_subj.glob('*nii.gz')):
@@ -249,9 +290,9 @@ for path_model in model_files:
         model_dice_scores[path_model] = mean_dice
         print(f"Mean Dice for {model}: {mean_dice:.4f}")
 
-    # Clean up temporary outputs (delete nifti/posteriors/resampled, keep CSVs)
+    # Clean up temporary outputs (delete nifti/posteriors/resampled, keep CSVs + TTA)
     if DELETE_TMP_PREDICTIONS:
-        # Delete nifti files
+        # Delete nifti files (but not TTA subdirectory)
         for f in glob(os.path.join(path_segm, '*.nii.gz')):
             os.remove(f)
         # Delete posteriors and resampled directories
@@ -259,7 +300,7 @@ for path_model in model_files:
             shutil.rmtree(path_posteriors)
         if os.path.exists(path_resampled):
             shutil.rmtree(path_resampled)
-        print(f"Cleaned up segmentations (kept CSVs): {path_segm}")
+        print(f"Cleaned up segmentations (kept CSVs + TTA uncertainty): {path_segm}")
 
     # Clear GPU memory between models
     keras.backend.clear_session()

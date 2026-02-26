@@ -239,6 +239,11 @@ for path_model in model_files:
         tf.keras.backend.clear_session()
         print("TTA uncertainty estimation complete.")
 
+    # Build TTA lookup by basename for merging with Dice results
+    tta_lookup = {}
+    for tta_r in tta_results_list:
+        tta_lookup[tta_r['basename']] = tta_r
+
     # === DICE EVALUATION ===
     path_subj = Path(path_segm)
     for sub in sorted(path_subj.glob('*nii.gz')):
@@ -279,10 +284,21 @@ for path_model in model_files:
                 prediction_path=path_segm
             )
 
-            # Collect results for summary
+            # Collect results for summary, merging TTA Dice if available
             if results:
                 results['model'] = model
                 results['epoch'] = get_epoch(path_model)
+
+                # Match TTA results by basename (strip .nii from sub.stem)
+                basename = sub.name.replace('.nii.gz', '')
+                tta_r = tta_lookup.get(basename)
+                if tta_r:
+                    results['tta_dice'] = tta_r.get('tta_dice')
+                    results['tta_dice_lh'] = tta_r.get('tta_dice_lh')
+                    results['tta_dice_rh'] = tta_r.get('tta_dice_rh')
+                    print(f"  Actual Dice: {results.get('dice', 'N/A'):.4f}  |  "
+                          f"TTA Dice: {results['tta_dice']:.4f}")
+
                 all_model_results.append(results)
 
     # Calculate mean dice for this model

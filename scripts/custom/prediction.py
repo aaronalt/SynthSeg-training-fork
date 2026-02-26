@@ -28,7 +28,7 @@ FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-det
 RERUN_TMP_PREDICTIONS = False
 
 # === TTA UNCERTAINTY OPTIONS ===
-ENABLE_TTA_UNCERTAINTY = False       # Generate claustrum uncertainty maps via TTA
+ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
 N_TTA_AUGMENTATIONS = 10            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA

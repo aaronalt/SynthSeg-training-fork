@@ -225,6 +225,86 @@ def compute_claustrum_uncertainty(all_posteriors, labels_segmentation,
     )
 
 
+def compute_tta_dice(all_posteriors, labels_segmentation,
+                     claustrum_labels=None):
+    """
+    Compute TTA self-consistency Dice: mean pairwise Dice between all
+    N argmax segmentations derived from TTA posteriors, restricted to
+    claustrum labels. This is a per-subject quality metric that requires
+    no ground truth.
+
+    High TTA Dice = model gives consistent claustrum predictions under
+    augmentation = likely reliable segmentation.
+
+    Computed separately for each claustrum label (LH/RH) and combined.
+
+    Args:
+        all_posteriors: (N, H, W, D, n_labels) from generate_tta_posteriors
+        labels_segmentation: 1-D array of label values in channel order
+        claustrum_labels: [138, 139] by default
+
+    Returns:
+        dict with keys:
+            tta_dice_combined: float — mean pairwise Dice over all claustrum
+            tta_dice_per_label: dict {label: float} — per-hemisphere
+            pairwise_dices: (N, N) array — full pairwise matrix (combined)
+    """
+    if claustrum_labels is None:
+        claustrum_labels = CLAUSTRUM_LABELS
+
+    labels_segmentation = np.asarray(labels_segmentation)
+    n_aug = all_posteriors.shape[0]
+
+    # Argmax each TTA run to get hard segmentations
+    seg_indices = np.argmax(all_posteriors, axis=-1)  # (N, H, W, D)
+    # Map indices back to label values
+    tta_segs = labels_segmentation[seg_indices]        # (N, H, W, D)
+
+    def _pairwise_dice(masks):
+        """Mean pairwise Dice for a list of N binary masks."""
+        n = len(masks)
+        dices = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                intersection = np.sum(masks[i] & masks[j])
+                union = np.sum(masks[i]) + np.sum(masks[j])
+                if union == 0:
+                    dices.append(1.0)  # both empty = perfect agreement
+                else:
+                    dices.append(2.0 * intersection / union)
+        return np.mean(dices) if dices else 0.0
+
+    # Per-label Dice
+    per_label = {}
+    all_masks_combined = []
+    for cl in claustrum_labels:
+        masks = [(tta_segs[t] == cl) for t in range(n_aug)]
+        per_label[int(cl)] = _pairwise_dice(masks)
+        if not all_masks_combined:
+            all_masks_combined = [m.copy() for m in masks]
+        else:
+            for t in range(n_aug):
+                all_masks_combined[t] |= masks[t]
+
+    # Combined (any claustrum label)
+    combined_dice = _pairwise_dice(all_masks_combined)
+
+    # Full pairwise matrix (combined) for reference
+    pairwise = np.ones((n_aug, n_aug), dtype=np.float32)
+    for i in range(n_aug):
+        for j in range(i + 1, n_aug):
+            inter = np.sum(all_masks_combined[i] & all_masks_combined[j])
+            total = np.sum(all_masks_combined[i]) + np.sum(all_masks_combined[j])
+            d = 2.0 * inter / total if total > 0 else 1.0
+            pairwise[i, j] = pairwise[j, i] = d
+
+    return dict(
+        tta_dice_combined=float(combined_dice),
+        tta_dice_per_label=per_label,
+        pairwise_dices=pairwise,
+    )
+
+
 # ===================================================================
 # SECTION 3: QUALITY PREDICTION — 2-SUBNETWORK CNN (3D)
 # ===================================================================
@@ -493,6 +573,10 @@ def predict_with_tta(path_images,
         unc_results = compute_claustrum_uncertainty(
             all_posteriors, labels_segmentation)
 
+        # Compute TTA self-consistency Dice (no ground truth needed)
+        tta_dice_results = compute_tta_dice(
+            all_posteriors, labels_segmentation)
+
         # Postprocess mean posteriors -> segmentation
         mean_post = unc_results['mean_posteriors_all']
         seg, posteriors, volumes = postprocess(
@@ -529,10 +613,19 @@ def predict_with_tta(path_images,
         utils.save_volume(unc_map.astype('float32'), aff, h, unc_path)
         utils.save_volume(conf_map.astype('float32'), aff, h, conf_path)
 
+        tta_combined = tta_dice_results['tta_dice_combined']
+        tta_per_label = tta_dice_results['tta_dice_per_label']
+        print(f"    TTA Dice: {tta_combined:.4f}  "
+              f"(LH={tta_per_label.get(138, 0):.4f}, "
+              f"RH={tta_per_label.get(139, 0):.4f})")
+
         result = dict(
             path=img_path, basename=basename,
             seg_path=seg_path, uncertainty_path=unc_path, confidence_path=conf_path,
             uncertainty_type=uncertainty_type,
+            tta_dice=tta_combined,
+            tta_dice_lh=tta_per_label.get(138, 0.0),
+            tta_dice_rh=tta_per_label.get(139, 0.0),
             volumes=volumes, predicted_dice=None,
         )
 
@@ -550,6 +643,24 @@ def predict_with_tta(path_images,
             print(f"    Predicted Dice: {result['predicted_dice']:.4f}")
 
         results.append(result)
+
+    # Save TTA Dice summary CSV
+    if results:
+        import pandas as pd
+        summary_rows = []
+        for r in results:
+            summary_rows.append({
+                'subject': r['basename'],
+                'tta_dice_combined': r['tta_dice'],
+                'tta_dice_lh': r['tta_dice_lh'],
+                'tta_dice_rh': r['tta_dice_rh'],
+                'predicted_dice': r.get('predicted_dice'),
+            })
+        df = pd.DataFrame(summary_rows)
+        csv_path = os.path.join(output_dir, 'tta_dice_summary.csv')
+        df.to_csv(csv_path, index=False)
+        print(f"\nTTA Dice summary saved to {csv_path}")
+        print(df.to_string(index=False))
 
     print(f"\nTTA complete. Outputs saved to {output_dir}")
     return results

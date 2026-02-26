@@ -24,7 +24,6 @@ os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 import numpy as np
 import keras
-import keras.layers as KL
 import keras.backend as K
 import tensorflow as tf
 from keras.models import Model
@@ -32,7 +31,7 @@ from scipy.ndimage import zoom
 from pathlib import Path
 
 from SynthSeg.predict import preprocess, build_model, postprocess, get_flip_indices
-from ext.lab2im import utils, edit_volumes, layers
+from ext.lab2im import utils, edit_volumes
 
 keras.backend.set_image_data_format('channels_last')
 
@@ -40,85 +39,98 @@ CLAUSTRUM_LABELS = [138, 139]  # LH, RH
 
 
 # ===================================================================
-# SECTION 1: TTA AUGMENTATION MODEL (using actual SynthSeg layers)
+# SECTION 1: TTA AUGMENTATION (numpy, mirrors SynthSeg intensity chain)
 # ===================================================================
 
-def build_tta_augmentation_model(input_shape, bias_field_std=0.3,
-                                 bias_scale=0.025, noise_std=100,
-                                 gamma_std=0.5):
+def apply_tta_augmentation(image, bias_field_std=0.3, bias_scale=0.025,
+                           noise_std=100, gamma_std=0.5):
     """
-    Build a Keras model that applies the same SynthSeg intensity
-    augmentation layers used during training.
+    Apply the same intensity augmentation chain used during SynthSeg
+    training (labels_to_image_model.py lines 186-195), implemented in
+    numpy so it works outside the training graph.
 
-    Chain (mirrors labels_to_image_model.py lines 186-195):
-        1. BiasFieldCorruption  — smooth multiplicative bias field
-        2. GaussianNoiseCorruption — voxel-wise Gaussian noise
-        3. IntensityAugmentation — clip, min-max normalise, gamma
+    Chain:
+        1. Bias field corruption — smooth multiplicative field
+        2. Gaussian noise — voxel-wise additive noise
+        3. Gamma augmentation — random contrast shift
+        4. Re-normalise to [0, 1]
 
-    Because the input is already normalised to [0, 1] (by predict's
-    preprocess), GaussianNoiseCorruption's noise_std is scaled by
-    1/300 to match the effective noise level after training's own
-    normalisation step (training clips to 300 then normalises).
-
-    Each call to model.predict() produces a *different* augmentation
-    because every layer samples fresh random values internally.
+    Input images are already [0, 1] from predict's preprocess(), so
+    noise_std is scaled by 1/300 to match the effective level after
+    training's own clip-to-300 + normalise step.
 
     Args:
-        input_shape: e.g. [None, None, None, 1]  (dynamic spatial dims)
-        bias_field_std: max std dev for the bias field (same as training)
-        bias_scale: ratio for the small-field sampling grid
-        noise_std: raw noise std from training (will be /300 internally)
-        gamma_std: std dev of log-gamma exponent
+        image: (1, H, W, D, C) numpy array, values in [0, 1]
+        bias_field_std, bias_scale, noise_std, gamma_std: augmentation
+            parameters (should match training config)
 
     Returns:
-        Keras Model  (input → augmented output, same shape)
+        Augmented image, same shape, re-normalised to [0, 1]
     """
-    image_input = KL.Input(shape=input_shape, name='tta_input')
+    from scipy.ndimage import zoom as nd_zoom
 
-    # 1. Bias field corruption (multiplicative — scale-invariant)
-    x = layers.BiasFieldCorruption(
-        bias_field_std=bias_field_std,
-        bias_scale=bias_scale,
-        same_bias_for_all_channels=False,
-        prob=1.0)(image_input)
+    aug = image.copy().astype(np.float32)
+    spatial_shape = aug.shape[1:-1]  # (H, W, D)
+    n_dims = len(spatial_shape)
 
-    # 2. Gaussian noise corruption (scale noise_std for [0,1] images)
-    x = layers.GaussianNoiseCorruption(
-        max_noise_std=noise_std / 300.0,
-        prob=0.95)(x)
+    # 1. Smooth multiplicative bias field
+    if bias_field_std > 0:
+        # Sample small random field, upsample to full resolution
+        small_shape = [max(1, int(np.ceil(s * bias_scale)))
+                       for s in spatial_shape]
+        small_field = np.random.normal(0, bias_field_std, small_shape)
+        zoom_factors = [s / max(sf, 1)
+                        for s, sf in zip(spatial_shape, small_shape)]
+        bias_field = nd_zoom(small_field, zoom_factors, order=3)
+        bias_field = np.exp(bias_field)  # multiplicative
+        # Apply to each channel
+        for c in range(aug.shape[-1]):
+            aug[0, ..., c] *= bias_field
 
-    # 3. Intensity augmentation: clip + normalise back to [0,1] + gamma
-    #    noise_std=0 here (noise already applied above), clip=0 → no clip,
-    #    normalise=True re-maps to [0,1] after bias+noise shifts range,
-    #    gamma_std controls contrast augmentation strength.
-    x = layers.IntensityAugmentation(
-        noise_std=0,
-        clip=0,
-        normalise=True,
-        norm_perc=0,
-        gamma_std=gamma_std,
-        separate_channels=True,
-        prob_noise=0,
-        prob_gamma=1.0)(x)
+    # 2. Additive Gaussian noise (scaled for [0,1] range)
+    if noise_std > 0 and np.random.rand() < 0.95:  # prob=0.95 as in training
+        effective_std = np.random.uniform(0, noise_std / 300.0)
+        noise = np.random.normal(0, effective_std, aug.shape)
+        aug += noise.astype(np.float32)
 
-    return Model(inputs=image_input, outputs=x, name='tta_augmentation')
+    # 3. Gamma augmentation (random contrast)
+    if gamma_std > 0:
+        gamma = np.exp(np.random.normal(0, gamma_std))
+        # Apply per-channel (separate_channels=True in training)
+        for c in range(aug.shape[-1]):
+            ch = aug[0, ..., c]
+            mn, mx = ch.min(), ch.max()
+            if mx - mn > 1e-8:
+                ch = (ch - mn) / (mx - mn)
+                ch = np.power(ch, gamma)
+                aug[0, ..., c] = ch * (mx - mn) + mn
+
+    # 4. Re-normalise to [0, 1]
+    mn, mx = aug.min(), aug.max()
+    if mx - mn > 1e-8:
+        aug = (aug - mn) / (mx - mn)
+    else:
+        aug = np.clip(aug, 0, 1)
+
+    return aug.astype(np.float32)
 
 
 # ===================================================================
 # SECTION 2: TTA POSTERIOR GENERATION & UNCERTAINTY COMPUTATION
 # ===================================================================
 
-def generate_tta_posteriors(image_preprocessed, seg_net, aug_model,
-                            n_augmentations=10):
+def generate_tta_posteriors(image_preprocessed, seg_net, n_augmentations=10,
+                            bias_field_std=0.3, bias_scale=0.025,
+                            noise_std=100, gamma_std=0.5):
     """
     Run N augmented forward passes through the segmentation model.
 
     Args:
         image_preprocessed: (1, H, W, D, 1) preprocessed image
         seg_net: Trained SynthSeg Keras model (may include flip averaging)
-        aug_model: TTA augmentation Keras model (built by
-                   build_tta_augmentation_model)
         n_augmentations: Total predictions including the un-augmented one
+        bias_field_std, bias_scale, noise_std, gamma_std: augmentation
+            parameters (should match training config)
 
     Returns:
         np.ndarray of shape (N, H, W, D, n_labels) — squeezed posteriors
@@ -129,10 +141,14 @@ def generate_tta_posteriors(image_preprocessed, seg_net, aug_model,
     post = seg_net.predict(image_preprocessed, verbose=0)
     all_posteriors.append(np.squeeze(post))
 
-    # 2. Augmented predictions — each aug_model.predict() call samples
-    #    fresh random augmentation parameters via the SynthSeg layers
+    # 2. Augmented predictions — each call samples fresh random params
     for _ in range(n_augmentations - 1):
-        aug = aug_model.predict(image_preprocessed, verbose=0)
+        aug = apply_tta_augmentation(
+            image_preprocessed,
+            bias_field_std=bias_field_std,
+            bias_scale=bias_scale,
+            noise_std=noise_std,
+            gamma_std=gamma_std)
         post = seg_net.predict(aug, verbose=0)
         all_posteriors.append(np.squeeze(post))
 
@@ -432,11 +448,6 @@ def predict_with_tta(path_images,
         sigma_smoothing=sigma_smoothing, flip_indices=flip_indices,
         gradients=False)
 
-    # TTA augmentation model will be built lazily with concrete spatial
-    # dims (BiasFieldCorruption needs known shape for the bias grid).
-    aug_model = None
-    _aug_shape_cache = None
-
     # Load quality prediction model if provided
     quality_model = None
     if quality_model_weights and os.path.isfile(quality_model_weights):
@@ -470,23 +481,13 @@ def predict_with_tta(path_images,
         image, aff, h, im_res, shape, pad_idx, crop_idx = preprocess(
             img_path, n_levels, target_res, crop=_crop, min_pad=_min_pad)
 
-        # Build / rebuild aug model when preprocessed shape changes
-        img_shape = list(image.shape[1:])  # concrete (H, W, D, C)
-        if aug_model is None or img_shape != _aug_shape_cache:
-            aug_model = build_tta_augmentation_model(
-                input_shape=img_shape,
-                bias_field_std=bias_field_std,
-                bias_scale=bias_scale,
-                noise_std=noise_std,
-                gamma_std=gamma_std)
-            _aug_shape_cache = img_shape
-            print(f"    Built TTA augmentation model for shape {img_shape} "
-                  f"(bias_field_std={bias_field_std}, noise_std={noise_std}, "
-                  f"gamma_std={gamma_std})")
-
-        # TTA forward passes using SynthSeg augmentation layers
+        # TTA forward passes with SynthSeg-matched augmentations
         all_posteriors = generate_tta_posteriors(
-            image, seg_net, aug_model, n_augmentations)
+            image, seg_net, n_augmentations,
+            bias_field_std=bias_field_std,
+            bias_scale=bias_scale,
+            noise_std=noise_std,
+            gamma_std=gamma_std)
 
         # Compute claustrum uncertainty
         unc_results = compute_claustrum_uncertainty(

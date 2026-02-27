@@ -196,21 +196,79 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
     X_std = X.std(axis=0) + 1e-8
     X_norm = (X - X_mean) / X_std
 
-    # === Approach 1: Ridge regression (baseline) ===
+    # === Extract subject IDs for LOSO grouping ===
+    # subject_ids look like "checkpoint_name/5740_lh" — extract numeric subject
+    from scipy.stats import spearmanr
     from sklearn.linear_model import RidgeCV
-    from sklearn.model_selection import LeaveOneOut, cross_val_predict
 
+    subject_groups = []
+    for sid in subject_ids:
+        m = re.search(r'(\d+)_(?:lh|rh)', sid)
+        subject_groups.append(m.group(1) if m else sid)
+    unique_subjects = sorted(set(subject_groups))
+    print(f"\nLOSO subjects ({len(unique_subjects)}): {unique_subjects}")
+
+    def loso_cv(fit_predict_fn, X_data, y_data, groups):
+        """Leave-One-Subject-Out cross-validation."""
+        preds = np.zeros_like(y_data)
+        unique = sorted(set(groups))
+        for held_out in unique:
+            test_mask = np.array([g == held_out for g in groups])
+            train_mask = ~test_mask
+            preds[test_mask] = fit_predict_fn(
+                X_data[train_mask], y_data[train_mask],
+                X_data[test_mask])
+        return preds
+
+    def bootstrap_ci(y_true, y_pred, metric_fn, n_boot=1000, ci=95):
+        """Bootstrap confidence interval for a metric."""
+        rng = np.random.RandomState(42)
+        n = len(y_true)
+        scores = np.zeros(n_boot)
+        for b in range(n_boot):
+            idx = rng.randint(0, n, size=n)
+            scores[b] = metric_fn(y_true[idx], y_pred[idx])
+        lo = np.percentile(scores, (100 - ci) / 2)
+        hi = np.percentile(scores, 100 - (100 - ci) / 2)
+        return lo, hi
+
+    def pearson_r(a, b):
+        if np.std(a) < 1e-10 or np.std(b) < 1e-10:
+            return 0.0
+        return np.corrcoef(a, b)[0, 1]
+
+    def spearman_r(a, b):
+        if len(a) < 3:
+            return 0.0
+        return spearmanr(a, b).correlation
+
+    def rmse(a, b):
+        return np.sqrt(np.mean((a - b) ** 2))
+
+    # === Approach 1: Ridge regression ===
+    def ridge_fit_predict(X_tr, y_tr, X_te):
+        m = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], cv=min(5, len(y_tr)))
+        m.fit(X_tr, y_tr)
+        return m.predict(X_te)
+
+    loso_preds_ridge = loso_cv(ridge_fit_predict, X_norm, y, subject_groups)
+    ridge_pearson = pearson_r(y, loso_preds_ridge)
+    ridge_spearman = spearman_r(y, loso_preds_ridge)
+    ridge_rmse = rmse(y, loso_preds_ridge)
+
+    # Bootstrap CIs
+    ridge_pearson_ci = bootstrap_ci(y, loso_preds_ridge, pearson_r)
+    ridge_spearman_ci = bootstrap_ci(y, loso_preds_ridge, spearman_r)
+    ridge_rmse_ci = bootstrap_ci(y, loso_preds_ridge, lambda a, b: rmse(a, b))
+
+    # Fit final model on all data
     ridge = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], cv=5)
-    # Leave-one-out cross-validation for honest evaluation
-    loo_preds = cross_val_predict(ridge, X_norm, y, cv=LeaveOneOut())
-    loo_corr = np.corrcoef(y, loo_preds)[0, 1]
-    loo_rmse = np.sqrt(np.mean((y - loo_preds) ** 2))
-
-    # Fit on all data for final model
     ridge.fit(X_norm, y)
-    print(f"\n=== Ridge Regression (LOO cross-validated) ===")
-    print(f"Pearson r: {loo_corr:.4f}")
-    print(f"RMSE: {loo_rmse:.4f}")
+
+    print(f"\n=== Ridge Regression (LOSO cross-validated, {len(unique_subjects)} folds) ===")
+    print(f"Pearson r:  {ridge_pearson:.4f}  95% CI [{ridge_pearson_ci[0]:.4f}, {ridge_pearson_ci[1]:.4f}]")
+    print(f"Spearman r: {ridge_spearman:.4f}  95% CI [{ridge_spearman_ci[0]:.4f}, {ridge_spearman_ci[1]:.4f}]")
+    print(f"RMSE:       {ridge_rmse:.4f}  95% CI [{ridge_rmse_ci[0]:.4f}, {ridge_rmse_ci[1]:.4f}]")
     print(f"Best alpha: {ridge.alpha_:.2f}")
 
     # Feature importance
@@ -221,13 +279,44 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
         print(f"  {name:<20s} {coef:+.4f}")
 
     # === Approach 2: Small neural net (if enough data) ===
-    nn_corr = None
+    nn_pearson = None
+    loso_preds_nn = None
     if len(y) >= 20:
         import keras
         from keras.layers import Input, Dense, Dropout
         from keras.models import Model as KerasModel
-        from keras.callbacks import EarlyStopping, ReduceLROnPlateau
+        from keras.callbacks import EarlyStopping
 
+        def nn_fit_predict(X_tr, y_tr, X_te):
+            inp = Input(shape=(X_tr.shape[1],))
+            h = Dense(32, activation='relu')(inp)
+            h = Dropout(0.3)(h)
+            h = Dense(16, activation='relu')(h)
+            h = Dropout(0.2)(h)
+            out = Dense(1, activation='linear')(h)
+            m = KerasModel(inputs=inp, outputs=out)
+            m.compile(optimizer='adam', loss='mse')
+            m.fit(X_tr, y_tr, epochs=200,
+                  batch_size=max(1, len(y_tr) // 4), verbose=0,
+                  validation_split=0.15,
+                  callbacks=[EarlyStopping(patience=20, restore_best_weights=True)])
+            return m.predict(X_te, verbose=0).flatten()
+
+        loso_preds_nn = loso_cv(nn_fit_predict, X_norm, y, subject_groups)
+        nn_pearson = pearson_r(y, loso_preds_nn)
+        nn_spearman = spearman_r(y, loso_preds_nn)
+        nn_rmse = rmse(y, loso_preds_nn)
+
+        nn_pearson_ci = bootstrap_ci(y, loso_preds_nn, pearson_r)
+        nn_spearman_ci = bootstrap_ci(y, loso_preds_nn, spearman_r)
+        nn_rmse_ci = bootstrap_ci(y, loso_preds_nn, lambda a, b: rmse(a, b))
+
+        print(f"\n=== Small Neural Net (LOSO cross-validated, {len(unique_subjects)} folds) ===")
+        print(f"Pearson r:  {nn_pearson:.4f}  95% CI [{nn_pearson_ci[0]:.4f}, {nn_pearson_ci[1]:.4f}]")
+        print(f"Spearman r: {nn_spearman:.4f}  95% CI [{nn_spearman_ci[0]:.4f}, {nn_spearman_ci[1]:.4f}]")
+        print(f"RMSE:       {nn_rmse:.4f}  95% CI [{nn_rmse_ci[0]:.4f}, {nn_rmse_ci[1]:.4f}]")
+
+        # Train final NN on all data
         inp = Input(shape=(X_norm.shape[1],))
         h = Dense(32, activation='relu')(inp)
         h = Dropout(0.3)(h)
@@ -236,32 +325,12 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
         out = Dense(1, activation='linear')(h)
         nn_model = KerasModel(inputs=inp, outputs=out)
         nn_model.compile(optimizer='adam', loss='mse')
-
-        # LOO for neural net too (slower but honest)
-        nn_loo_preds = np.zeros_like(y)
-        for i in range(len(y)):
-            mask = np.ones(len(y), dtype=bool)
-            mask[i] = False
-            nn_model.fit(X_norm[mask], y[mask],
-                         epochs=200, batch_size=max(1, len(y) // 4),
-                         verbose=0, validation_split=0.15,
-                         callbacks=[EarlyStopping(patience=20, restore_best_weights=True)])
-            nn_loo_preds[i] = nn_model.predict(X_norm[i:i+1], verbose=0)[0, 0]
-
-        nn_corr = np.corrcoef(y, nn_loo_preds)[0, 1]
-        nn_rmse = np.sqrt(np.mean((y - nn_loo_preds) ** 2))
-
-        print(f"\n=== Small Neural Net (LOO cross-validated) ===")
-        print(f"Pearson r: {nn_corr:.4f}")
-        print(f"RMSE: {nn_rmse:.4f}")
-
-        # Train final NN on all data
         nn_model.fit(X_norm, y, epochs=200,
                      batch_size=max(1, len(y) // 4), verbose=0,
                      callbacks=[EarlyStopping(patience=30, restore_best_weights=True)])
 
     # Pick best approach
-    best = 'nn' if (nn_corr is not None and nn_corr > loo_corr) else 'ridge'
+    best = 'nn' if (nn_pearson is not None and nn_pearson > ridge_pearson) else 'ridge'
     print(f"\n=== Best approach: {best} ===")
 
     # Save model + normalization params
@@ -280,13 +349,41 @@ def train(tta_dir, dice_csv, save_path, roi_size=(64, 64, 64),
         nn_model.save_weights(save_path)
         print(f"NN weights saved to {save_path}")
 
-    # Per-subject results (using LOO predictions for honest eval)
-    preds = loo_preds if best == 'ridge' else nn_loo_preds
-    print(f"\nPer-subject predictions vs actual (LOO):")
-    print(f"{'Subject':<20} {'Actual':>8} {'Predicted':>10} {'Error':>8}")
-    print("-" * 48)
+    # Per-subject results (LOSO predictions)
+    preds = loso_preds_ridge if best == 'ridge' else loso_preds_nn
+    print(f"\nPer-subject predictions vs actual (LOSO):")
+    print(f"{'Subject':<40} {'Actual':>8} {'Predicted':>10} {'Error':>8}")
+    print("-" * 68)
     for sid, actual, pred in sorted(zip(subject_ids, y, preds), key=lambda x: x[1]):
-        print(f"{sid:<20} {actual:>8.4f} {pred:>10.4f} {pred-actual:>+8.4f}")
+        print(f"{sid:<40} {actual:>8.4f} {pred:>10.4f} {pred-actual:>+8.4f}")
+
+    # Save LOSO results as CSV for plots (Bland-Altman, scatter)
+    results_df = pd.DataFrame({
+        'subject': subject_ids,
+        'subject_group': subject_groups,
+        'actual_dice': y,
+        'predicted_dice': preds,
+        'error': preds - y,
+    })
+    results_csv = save_path.replace('.h5', '_loso_results.csv')
+    results_df.to_csv(results_csv, index=False)
+    print(f"\nLOSO results saved to {results_csv}")
+
+    # Print summary for paper
+    best_pearson = ridge_pearson if best == 'ridge' else nn_pearson
+    best_spearman = ridge_spearman if best == 'ridge' else nn_spearman
+    best_rmse = ridge_rmse if best == 'ridge' else nn_rmse
+    best_p_ci = ridge_pearson_ci if best == 'ridge' else nn_pearson_ci
+    best_s_ci = ridge_spearman_ci if best == 'ridge' else nn_spearman_ci
+    best_r_ci = ridge_rmse_ci if best == 'ridge' else nn_rmse_ci
+    print(f"\n{'='*60}")
+    print(f"RESULTS FOR PAPER ({best}, LOSO CV, {len(unique_subjects)} subjects)")
+    print(f"{'='*60}")
+    print(f"Pearson r  = {best_pearson:.3f} (95% CI: {best_p_ci[0]:.3f}-{best_p_ci[1]:.3f})")
+    print(f"Spearman r = {best_spearman:.3f} (95% CI: {best_s_ci[0]:.3f}-{best_s_ci[1]:.3f})")
+    print(f"RMSE       = {best_rmse:.4f} (95% CI: {best_r_ci[0]:.4f}-{best_r_ci[1]:.4f})")
+    print(f"N samples  = {len(y)}, N subjects = {len(unique_subjects)}")
+    print(f"{'='*60}")
 
     return ridge
 

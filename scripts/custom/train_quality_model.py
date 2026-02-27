@@ -78,8 +78,9 @@ def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
         hemi = row['hemisphere'].lower()
         dice = row['dice']
         if has_pred_path:
-            pred_path = str(row['prediction_path'])
-            dice_lookup[(pred_path, sid, hemi)] = dice
+            # Use basename of prediction_path for matching (avoids local vs remote path mismatch)
+            pred_basename = os.path.basename(str(row['prediction_path']).rstrip('/'))
+            dice_lookup[(pred_basename, sid, hemi)] = dice
         # Always add a simple key as fallback
         simple_key = (sid, hemi)
         if simple_key not in dice_lookup:
@@ -113,10 +114,10 @@ def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
             subject_id = match.group(1)
             hemi = match.group(2).lower()
 
-            # Look up Dice — try checkpoint-specific key first
+            # Look up Dice — try checkpoint-specific key first (by basename)
             dice = None
             if has_pred_path:
-                dice = dice_lookup.get((checkpoint_path, subject_id, hemi))
+                dice = dice_lookup.get((checkpoint_name, subject_id, hemi))
             if dice is None:
                 dice = dice_lookup.get((subject_id, hemi))
             if dice is None:

@@ -29,7 +29,7 @@ RERUN_TMP_PREDICTIONS = False
 
 # === TTA UNCERTAINTY OPTIONS ===
 ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
-N_TTA_AUGMENTATIONS = 10            # Number of augmented predictions per image
+N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
 TTA_QUALITY_MODEL_WEIGHTS = '/home/althause/data/weights/quality_model_weights_features.npz'  # Ridge model (.npz) or None to skip
@@ -57,8 +57,8 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260222_223919' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-# model_files = model_files[60:]
-model_files = model_files[::5]
+model_files = model_files[59:70]
+# model_files = model_files[::5]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
 gt_dirs = {
@@ -111,7 +111,7 @@ for path_model in model_files:
     exp = model_dir.split('/')[-1]
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
-    path_images = '/home/althause/data/TEST'
+    path_images = '/home/althause/data/TEST/no_gt'
 
     # Determine field strength (manual override or auto-detect)
     if FORCE_FIELD_STRENGTH:

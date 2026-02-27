@@ -390,30 +390,75 @@ def extract_quality_features(seg_data, unc_data, hemisphere=None):
 
 def load_quality_model(weights_path):
     """
-    Load a trained ridge regression quality model from .npz file.
+    Load a trained quality prediction model (ridge or neural net).
 
     Args:
-        weights_path: Path to .npz file saved by train_quality_model.py
+        weights_path: Path to .npz file saved by train_quality_model.py.
+                      If best_approach='nn', also loads the .h5 NN weights
+                      from the same directory.
 
     Returns:
-        dict with keys: coef, intercept, X_mean, X_std
+        dict with keys: approach, X_mean, X_std, and either
+            ridge: coef, intercept
+            nn: nn_model (Keras model)
         or None if file not found
     """
     if not weights_path or not os.path.isfile(weights_path):
         return None
 
-    data = np.load(weights_path, allow_pickle=True)
-    return dict(
-        coef=data['ridge_coef'],
-        intercept=float(data['ridge_intercept']),
+    # The .npz always exists regardless of approach
+    npz_path = weights_path
+    if npz_path.endswith('.h5'):
+        npz_path = npz_path.replace('.h5', '_features.npz')
+    if not os.path.isfile(npz_path):
+        return None
+
+    data = np.load(npz_path, allow_pickle=True)
+    approach = str(data.get('best_approach', 'ridge'))
+
+    params = dict(
+        approach=approach,
         X_mean=data['X_mean'],
         X_std=data['X_std'],
     )
 
+    if approach == 'nn':
+        # Build the same architecture and load weights
+        from keras.layers import Input, Dense, Dropout
+        n_features = len(data['X_mean'])
+        inp = Input(shape=(n_features,))
+        h = Dense(32, activation='relu')(inp)
+        h = Dropout(0.3)(h)
+        h = Dense(16, activation='relu')(h)
+        h = Dropout(0.2)(h)
+        out = Dense(1, activation='linear')(h)
+        nn_model = Model(inputs=inp, outputs=out)
+        nn_model.compile(optimizer='adam', loss='mse')
+
+        # Load weights from .h5
+        h5_path = npz_path.replace('_features.npz', '.h5')
+        if os.path.isfile(h5_path):
+            nn_model.load_weights(h5_path)
+            params['nn_model'] = nn_model
+            print(f"Loaded NN quality model from {h5_path}")
+        else:
+            print(f"WARNING: NN weights not found at {h5_path}, falling back to ridge")
+            approach = 'ridge'
+            params['approach'] = 'ridge'
+
+    if approach == 'ridge':
+        params['coef'] = data['ridge_coef']
+        params['intercept'] = float(data['ridge_intercept'])
+
+    return params
+
 
 def predict_quality(seg_data, unc_data, quality_params, hemisphere=None):
     """
-    Predict Dice score for a single subject using the ridge model.
+    Predict Dice score for a single subject.
+
+    Supports both ridge regression and neural net approaches,
+    determined by quality_params['approach'].
 
     Args:
         seg_data: 3D int array (segmentation)
@@ -426,7 +471,13 @@ def predict_quality(seg_data, unc_data, quality_params, hemisphere=None):
     """
     features = extract_quality_features(seg_data, unc_data, hemisphere=hemisphere)
     X_norm = (features - quality_params['X_mean']) / (quality_params['X_std'] + 1e-8)
-    pred = float(X_norm @ quality_params['coef'] + quality_params['intercept'])
+
+    if quality_params['approach'] == 'nn' and 'nn_model' in quality_params:
+        pred = float(quality_params['nn_model'].predict(
+            X_norm[np.newaxis], verbose=0)[0, 0])
+    else:
+        pred = float(X_norm @ quality_params['coef'] + quality_params['intercept'])
+
     return np.clip(pred, 0.0, 1.0)
 
 

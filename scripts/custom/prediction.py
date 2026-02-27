@@ -111,7 +111,7 @@ for path_model in model_files:
     exp = model_dir.split('/')[-1]
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
-    path_images = '/home/althause/data/TEST/no_gt'
+    path_images = '/home/althause/data/TEST/trainingset'
 
     # Determine field strength (manual override or auto-detect)
     if FORCE_FIELD_STRENGTH:

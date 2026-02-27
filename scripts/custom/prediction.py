@@ -28,7 +28,7 @@ FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-det
 RERUN_TMP_PREDICTIONS = False
 
 # === TTA UNCERTAINTY OPTIONS ===
-ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
+ENABLE_TTA_UNCERTAINTY = False       # Generate claustrum uncertainty maps via TTA
 N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
@@ -54,10 +54,10 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_203703' # /home/althause/data/logs/10000_steps_minus_bad_labels.log
-# model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260222_223919' # /home/althause/data/logs/7t_validation.log
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
+#model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260222_223919' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[30:31]
+model_files = model_files[64:]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation

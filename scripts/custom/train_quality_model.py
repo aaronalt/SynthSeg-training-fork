@@ -114,11 +114,12 @@ def load_and_match_data(tta_dir, dice_csv, roi_size=(64, 64, 64)):
             subject_id = match.group(1)
             hemi = match.group(2).lower()
 
-            # Look up Dice — try checkpoint-specific key first (by basename)
+            # Look up Dice — use checkpoint-specific key when available
             dice = None
             if has_pred_path:
                 dice = dice_lookup.get((checkpoint_name, subject_id, hemi))
-            if dice is None:
+                # Don't fall back to simple key — that would assign wrong checkpoint's Dice
+            else:
                 dice = dice_lookup.get((subject_id, hemi))
             if dice is None:
                 print(f"    No Dice for {subject_id} {hemi}, skipping")

@@ -32,7 +32,7 @@ ENABLE_TTA_UNCERTAINTY = False       # Generate claustrum uncertainty maps via T
 N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
 TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.5                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
-TTA_QUALITY_MODEL_WEIGHTS = '/home/althause/data/weights/quality_model_weights_features.npz'  # Ridge model (.npz) or None to skip
+TTA_QUALITY_MODEL_WEIGHTS = None # '/home/althause/data/weights/quality_model_weights_features.npz'  # Ridge model (.npz) or None to skip
 
 # Store results across all models for summary
 all_model_results = []
@@ -57,7 +57,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
 #model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260222_223919' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[64:]
+model_files = model_files[69:]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation

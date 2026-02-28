@@ -39,6 +39,24 @@ def compute_dice(pred_mask, gt_mask):
     return 2.0 * intersection / union
 
 
+def compute_precision(pred_mask, gt_mask):
+    """Fraction of predicted voxels that are true positives"""
+    tp = np.logical_and(pred_mask, gt_mask).sum()
+    pp = pred_mask.sum()
+    if pp == 0:
+        return 0.0
+    return float(tp) / float(pp)
+
+
+def compute_recall(pred_mask, gt_mask):
+    """Fraction of GT voxels correctly predicted (sensitivity)"""
+    tp = np.logical_and(pred_mask, gt_mask).sum()
+    gp = gt_mask.sum()
+    if gp == 0:
+        return 0.0
+    return float(tp) / float(gp)
+
+
 def compute_hausdorff(pred_mask, gt_mask, voxel_size):
     """Compute 95th percentile Hausdorff distance in mm"""
     if not np.any(pred_mask) or not np.any(gt_mask):
@@ -117,8 +135,10 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
     manual_pixdim = nib.affines.voxel_sizes(manual_nii.affine)
     voxel_vol = np.prod(manual_pixdim)
 
-    # Calculate Dice
+    # Calculate Dice, Precision, Recall
     dice_combined = compute_dice(pred_combined, gt_combined)
+    precision = compute_precision(pred_combined, gt_combined)
+    recall = compute_recall(pred_combined, gt_combined)
 
     # Calculate Volume
     vol_pred = pred_combined.sum() * voxel_vol
@@ -131,6 +151,8 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
         'group': group,
         'comparison_space': 'manual',
         'dice': float(dice_combined),
+        'precision': float(precision),
+        'recall': float(recall),
         'hausdorff_95_mm': float(compute_hausdorff(pred_combined, gt_combined, manual_pixdim)),
         'volume_pred_mm3': float(vol_pred),
         'volume_gt_mm3': float(vol_gt),

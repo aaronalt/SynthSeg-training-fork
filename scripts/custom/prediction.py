@@ -338,12 +338,28 @@ if all_model_results:
     print("SUMMARY: Performance across epochs")
     print(f"{'='*60}")
 
-    # Group by epoch and compute mean dice
+    # Group by epoch and compute mean dice, precision, recall
     if 'dice' in df.columns:
-        epoch_summary = df.groupby('epoch')['dice'].agg(['mean', 'std', 'count'])
-        print(epoch_summary)
-        best_epoch = epoch_summary['mean'].idxmax()
-        print(f"\nBest epoch: {best_epoch} (Dice: {epoch_summary['mean'].max():.4f})")
+        agg_cols = {'dice': ['mean', 'std']}
+        if 'precision' in df.columns:
+            agg_cols['precision'] = ['mean', 'std']
+        if 'recall' in df.columns:
+            agg_cols['recall'] = ['mean', 'std']
+        epoch_summary = df.groupby('epoch').agg(agg_cols)
+        epoch_summary.columns = ['_'.join(c) for c in epoch_summary.columns]
+
+        print(f"\n{'Epoch':>6}  {'Dice':>7}  {'±':>5}  {'Prec':>7}  {'±':>5}  {'Recall':>7}  {'±':>5}")
+        print("-" * 52)
+        for epoch, row in epoch_summary.iterrows():
+            prec_str = f"{row.get('precision_mean', float('nan')):7.4f}  {row.get('precision_std', float('nan')):5.4f}" if 'precision_mean' in row else "    N/A      N/A"
+            rec_str  = f"{row.get('recall_mean', float('nan')):7.4f}  {row.get('recall_std', float('nan')):5.4f}" if 'recall_mean' in row else "    N/A      N/A"
+            print(f"{epoch:>6}  {row['dice_mean']:7.4f}  {row['dice_std']:5.4f}  {prec_str}  {rec_str}")
+
+        best_epoch = epoch_summary['dice_mean'].idxmax()
+        print(f"\nBest epoch by Dice: {best_epoch} "
+              f"(Dice={epoch_summary.loc[best_epoch,'dice_mean']:.4f}, "
+              f"Prec={epoch_summary.loc[best_epoch,'precision_mean']:.4f}, "
+              f"Recall={epoch_summary.loc[best_epoch,'recall_mean']:.4f})")
 
     print(f"\nFull results saved to: {summary_path}")
     # Re-run prediction for best model and keep outputs

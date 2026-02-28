@@ -54,10 +54,10 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_203703' # /home/althause/data/logs/10000_steps_minus_bad_labels.log
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
-#model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260222_223919' # /home/althause/data/logs/7t_validation.log
+#model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260222_223919' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[69:]
+#model_files = model_files[69:]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
@@ -303,12 +303,21 @@ for path_model in model_files:
 
                 all_model_results.append(results)
 
-    # Calculate mean dice for this model
+    # Print per-epoch summary after each model completes
     model_results = [r for r in all_model_results if r.get('model') == model]
     if model_results and 'dice' in model_results[0]:
         mean_dice = np.mean([r['dice'] for r in model_results])
+        mean_prec = np.mean([r['precision'] for r in model_results]) if 'precision' in model_results[0] else None
+        mean_rec  = np.mean([r['recall']    for r in model_results]) if 'recall'    in model_results[0] else None
+        mean_iou  = np.mean([r['iou']       for r in model_results]) if 'iou'       in model_results[0] else None
         model_dice_scores[path_model] = mean_dice
-        print(f"Mean Dice for {model}: {mean_dice:.4f}")
+
+        epoch_num = get_epoch(path_model)
+        parts = [f"Epoch {epoch_num:>4} | Dice={mean_dice:.4f}"]
+        if mean_prec  is not None: parts.append(f"Prec={mean_prec:.4f}")
+        if mean_rec   is not None: parts.append(f"Recall={mean_rec:.4f}")
+        if mean_iou   is not None: parts.append(f"IoU={mean_iou:.4f}")
+        print("  " + "  |  ".join(parts))
 
     # Clean up temporary outputs (delete nifti/posteriors/resampled, keep CSVs + TTA)
     if DELETE_TMP_PREDICTIONS:
@@ -338,28 +347,36 @@ if all_model_results:
     print("SUMMARY: Performance across epochs")
     print(f"{'='*60}")
 
-    # Group by epoch and compute mean dice, precision, recall
+    # Group by epoch and compute mean metrics
     if 'dice' in df.columns:
         agg_cols = {'dice': ['mean', 'std']}
-        if 'precision' in df.columns:
-            agg_cols['precision'] = ['mean', 'std']
-        if 'recall' in df.columns:
-            agg_cols['recall'] = ['mean', 'std']
+        for col in ['precision', 'recall', 'iou']:
+            if col in df.columns:
+                agg_cols[col] = ['mean', 'std']
         epoch_summary = df.groupby('epoch').agg(agg_cols)
         epoch_summary.columns = ['_'.join(c) for c in epoch_summary.columns]
 
-        print(f"\n{'Epoch':>6}  {'Dice':>7}  {'±':>5}  {'Prec':>7}  {'±':>5}  {'Recall':>7}  {'±':>5}")
-        print("-" * 52)
-        for epoch, row in epoch_summary.iterrows():
-            prec_str = f"{row.get('precision_mean', float('nan')):7.4f}  {row.get('precision_std', float('nan')):5.4f}" if 'precision_mean' in row else "    N/A      N/A"
-            rec_str  = f"{row.get('recall_mean', float('nan')):7.4f}  {row.get('recall_std', float('nan')):5.4f}" if 'recall_mean' in row else "    N/A      N/A"
-            print(f"{epoch:>6}  {row['dice_mean']:7.4f}  {row['dice_std']:5.4f}  {prec_str}  {rec_str}")
+        # Composite score: equal weight of dice, precision, recall, iou
+        metric_means = [c for c in epoch_summary.columns if c.endswith('_mean')]
+        epoch_summary['composite'] = epoch_summary[metric_means].mean(axis=1)
 
-        best_epoch = epoch_summary['dice_mean'].idxmax()
-        print(f"\nBest epoch by Dice: {best_epoch} "
-              f"(Dice={epoch_summary.loc[best_epoch,'dice_mean']:.4f}, "
-              f"Prec={epoch_summary.loc[best_epoch,'precision_mean']:.4f}, "
-              f"Recall={epoch_summary.loc[best_epoch,'recall_mean']:.4f})")
+        has_prec = 'precision_mean' in epoch_summary.columns
+        has_rec  = 'recall_mean'    in epoch_summary.columns
+        has_iou  = 'iou_mean'       in epoch_summary.columns
+
+        header = f"{'Epoch':>6}  {'Dice':>7} ±{'':>5}  {'Prec':>7} ±{'':>5}  {'Recall':>7} ±{'':>5}  {'IoU':>7} ±{'':>5}  {'Composite':>9}"
+        print(f"\n{header}")
+        print("-" * len(header))
+        for epoch, row in epoch_summary.iterrows():
+            p = f"{row['precision_mean']:7.4f} {row['precision_std']:5.4f}" if has_prec else f"{'N/A':>7}  {'':>5}"
+            r = f"{row['recall_mean']:7.4f} {row['recall_std']:5.4f}"       if has_rec  else f"{'N/A':>7}  {'':>5}"
+            i = f"{row['iou_mean']:7.4f} {row['iou_std']:5.4f}"             if has_iou  else f"{'N/A':>7}  {'':>5}"
+            print(f"{epoch:>6}  {row['dice_mean']:7.4f} {row['dice_std']:5.4f}  {p}  {r}  {i}  {row['composite']:9.4f}")
+
+        best_by_dice      = epoch_summary['dice_mean'].idxmax()
+        best_by_composite = epoch_summary['composite'].idxmax()
+        print(f"\nBest epoch by Dice:      {best_by_dice} (Dice={epoch_summary.loc[best_by_dice,'dice_mean']:.4f})")
+        print(f"Best epoch by Composite: {best_by_composite} (Composite={epoch_summary.loc[best_by_composite,'composite']:.4f})")
 
     print(f"\nFull results saved to: {summary_path}")
     # Re-run prediction for best model and keep outputs

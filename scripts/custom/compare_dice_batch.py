@@ -39,6 +39,15 @@ def compute_dice(pred_mask, gt_mask):
     return 2.0 * intersection / union
 
 
+def compute_iou(pred_mask, gt_mask):
+    """Intersection over Union (Jaccard index)"""
+    intersection = np.logical_and(pred_mask, gt_mask).sum()
+    union = np.logical_or(pred_mask, gt_mask).sum()
+    if union == 0:
+        return 1.0
+    return float(intersection) / float(union)
+
+
 def compute_precision(pred_mask, gt_mask):
     """Fraction of predicted voxels that are true positives"""
     tp = np.logical_and(pred_mask, gt_mask).sum()
@@ -139,6 +148,7 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
     dice_combined = compute_dice(pred_combined, gt_combined)
     precision = compute_precision(pred_combined, gt_combined)
     recall = compute_recall(pred_combined, gt_combined)
+    iou = compute_iou(pred_combined, gt_combined)
 
     # Calculate Volume
     vol_pred = pred_combined.sum() * voxel_vol
@@ -153,6 +163,7 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
         'dice': float(dice_combined),
         'precision': float(precision),
         'recall': float(recall),
+        'iou': float(iou),
         'hausdorff_95_mm': float(compute_hausdorff(pred_combined, gt_combined, manual_pixdim)),
         'volume_pred_mm3': float(vol_pred),
         'volume_gt_mm3': float(vol_gt),
@@ -167,7 +178,7 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
     if save_output:
         df = pd.DataFrame(results, index=[0])
         headers = ['subject_id', 'hemisphere', 'group', 'comparison_space',
-                  'dice', 'hausdorff_95_mm', 'volume_pred_mm3',
+                  'dice', 'precision', 'recall', 'iou', 'hausdorff_95_mm', 'volume_pred_mm3',
                   'volume_gt_mm3', 'volume_diff_percent', 'left_clau_volume_mm3',
                   'right__clau_volume_mm3', 'model', 'prediction_path']
         file = os.path.join(output_dir, 'dice.csv')

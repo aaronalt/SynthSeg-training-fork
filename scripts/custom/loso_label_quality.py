@@ -53,8 +53,7 @@ DICE_THRESHOLD      = 0.50
 RECALL_THRESHOLD    = 0.45
 
 # GPUs to use (indices into CUDA_VISIBLE_DEVICES)
-GPUS                = [1, 3]
-MAX_PARALLEL        = len(GPUS)  # one fold per GPU at a time
+GPUS                = [1, 2, 3]  # one fold at a time per GPU
 # =====================================================================
 
 WORKER_SCRIPT = os.path.join(_SCRIPT_DIR, 'loso_worker.py')
@@ -187,7 +186,7 @@ if __name__ == '__main__':
 
     subjects = get_subjects(LABELS_DIR)
     print(f"Found {len(subjects)} subjects for LOSO: {subjects}")
-    print(f"Using {MAX_PARALLEL} GPUs: {GPUS}")
+    print(f"Using {len(GPUS)} GPUs: {GPUS} (1 fold per GPU)")
     print(f"Epochs per fold: {EPOCHS_PER_FOLD}, Steps: {STEPS_PER_EPOCH}")
     print(f"Output: {OUTPUT_DIR}\n")
 

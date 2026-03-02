@@ -209,7 +209,9 @@ def training(labels_dir,
                                      noise_std=noise_std,
                                      return_gradients=return_gradients)
 
-    val_brain_generator = BrainGenerator(labels_dir=val_path,
+    # Only create validation generator if val_path is provided
+    if val_path is not None:
+        val_brain_generator = BrainGenerator(labels_dir=val_path,
                                      generation_labels=generation_labels,
                                      n_neutral_labels=n_neutral_labels,
                                      output_labels=segmentation_labels,
@@ -241,6 +243,9 @@ def training(labels_dir,
                                      bias_scale=bias_scale,
                                      noise_std=noise_std,
                                      return_gradients=return_gradients)
+    else:
+        val_brain_generator = None
+        validation_steps = 0  # No validation if no val_path
 
     # generation model
     labels_to_image_model = brain_generator.labels_to_image_model
@@ -259,7 +264,7 @@ def training(labels_dir,
                                  batch_norm=-1,
                                  name='unet')
 
-    val_generator = utils.build_training_generator(val_brain_generator.model_inputs_generator, batchsize)
+    val_generator = utils.build_training_generator(val_brain_generator.model_inputs_generator, batchsize) if val_path is not None else None
     input_generator = utils.build_training_generator(brain_generator.model_inputs_generator, batchsize)
 
     # Load pretrained weights

@@ -57,7 +57,7 @@ GPUS                = [1, 3]
 MAX_PARALLEL        = len(GPUS)  # one fold per GPU at a time
 # =====================================================================
 
-WORKER_SCRIPT = os.path.join(os.path.dirname(__file__), 'loso_worker.py')
+WORKER_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), 'loso_worker.py'))
 PYTHON        = sys.executable
 
 

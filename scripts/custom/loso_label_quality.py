@@ -15,7 +15,9 @@ Usage:
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.')))
+# Resolve paths relative to this file's location, not the calling directory
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.abspath(os.path.join(_SCRIPT_DIR, '../..')))
 
 import json
 import subprocess
@@ -55,7 +57,7 @@ GPUS                = [1, 3]
 MAX_PARALLEL        = len(GPUS)  # one fold per GPU at a time
 # =====================================================================
 
-WORKER_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), 'loso_worker.py'))
+WORKER_SCRIPT = os.path.join(_SCRIPT_DIR, 'loso_worker.py')
 PYTHON        = sys.executable
 
 

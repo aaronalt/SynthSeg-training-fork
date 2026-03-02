@@ -53,7 +53,7 @@ DICE_THRESHOLD      = 0.50
 RECALL_THRESHOLD    = 0.45
 
 # GPUs to use (indices into CUDA_VISIBLE_DEVICES)
-GPUS                = [1, 2, 3]  # one fold at a time per GPU
+GPUS                = [0, 1, 2, 3]  # one fold at a time per GPU
 # =====================================================================
 
 WORKER_SCRIPT = os.path.join(_SCRIPT_DIR, 'loso_worker.py')

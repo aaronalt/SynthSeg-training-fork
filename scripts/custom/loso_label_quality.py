@@ -199,16 +199,17 @@ if __name__ == '__main__':
         print(f"Skipping {already_done} already-completed folds.")
     print(f"Running {len(pending)} folds...\n")
 
-    # Fill job queue
+    # Fill job queue, then add one sentinel per GPU at the end
     job_queue = Queue()
     for s in pending:
         job_queue.put(s)
+    for _ in GPUS:
+        job_queue.put(None)  # one sentinel per thread, added after all jobs
 
     # Launch GPU worker threads
     done_list = []
     threads = []
     for gpu_id in GPUS:
-        job_queue.put(None)  # sentinel to stop thread
         t = Thread(target=gpu_worker, args=(gpu_id, job_queue, done_list), daemon=True)
         t.start()
         threads.append(t)

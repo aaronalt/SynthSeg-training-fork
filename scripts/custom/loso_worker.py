@@ -162,18 +162,25 @@ def run_fold(held_out, labels_dir, gt_dirs, output_dir, checkpoint,
         print(f"[{held_out}] ERROR: No label files found for held-out subject.")
         return None
 
-    # === Predict on held-out subject's label maps ===
-    # Use the label maps as input images (they will be used to generate synthetic images)
-    # We need actual MRI images for prediction — find them from gt_dirs or a paired images dir
+    # === Find actual MRI images for held-out subject ===
+    MRI_IMAGES_DIR = '/home/althause/data/TEST/trainingset'
     held_out_images_dir = os.path.join(fold_dir, 'held_out_images')
     os.makedirs(held_out_images_dir, exist_ok=True)
 
-    # Symlink held-out label files to use as prediction inputs
-    # (prediction uses label maps directly through the synthesis pipeline)
-    for lf in held_out_labels:
-        dest = os.path.join(held_out_images_dir, os.path.basename(lf))
+    # Find MRI image for held-out subject (one image per subject, shared across modalities)
+    mri_matches = sorted(glob(os.path.join(MRI_IMAGES_DIR, f'*{held_out_id}*.nii.gz')))
+    if not mri_matches:
+        # Try with sub- prefix
+        mri_matches = sorted(glob(os.path.join(MRI_IMAGES_DIR, f'*{held_out}*.nii.gz')))
+    if not mri_matches:
+        print(f"[{held_out}] ERROR: No MRI image found in {MRI_IMAGES_DIR}")
+        return None
+
+    print(f"[{held_out}] Found {len(mri_matches)} MRI image(s): {[os.path.basename(m) for m in mri_matches]}")
+    for mri in mri_matches:
+        dest = os.path.join(held_out_images_dir, os.path.basename(mri))
         if not os.path.exists(dest):
-            os.symlink(os.path.abspath(lf), dest)
+            os.symlink(os.path.abspath(mri), dest)
 
     predict(
         held_out_images_dir,

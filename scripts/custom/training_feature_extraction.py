@@ -362,8 +362,9 @@ def train_model(model,
     save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_type, phase, n_epochs))
     callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
 
-    # early stopping on validation loss - high patience to allow small structures to learn
-    callbacks.append(KC.EarlyStopping(monitor='val_loss', patience=15, verbose=1, restore_best_weights=True))
+    # early stopping on validation loss - only when validation data is available
+    if validation_data is not None:
+        callbacks.append(KC.EarlyStopping(monitor='val_loss', patience=15, verbose=1, restore_best_weights=True))
 
     if extra_callbacks:
         callbacks.extend(extra_callbacks)

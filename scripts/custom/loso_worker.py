@@ -97,6 +97,7 @@ def run_fold(held_out, labels_dir, gt_dirs, output_dir, checkpoint,
         n_train += 1
 
     print(f"\n[{held_out}] Training on {n_train} subjects (held out: {held_out})")
+    print(f"[{held_out}] Checkpoint: {checkpoint} (exists={os.path.isfile(checkpoint)})")
 
     # === Load intensity priors ===
     means = np.load(os.path.join(intensity_priors_dir, 'prior_means.npy'))

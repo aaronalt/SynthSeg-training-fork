@@ -66,6 +66,26 @@ def find_gt(gt_dirs, subject_id, hemisphere):
     return None
 
 
+def find_all_gts(gt_dirs, subject_id, hemisphere):
+    """Return all (gt_path, gt_dir) matches across all GT directories."""
+    patterns = [
+        f'*{subject_id}*{hemisphere}*.nii.gz',
+        f'sub-{subject_id}*{hemisphere}*.nii.gz',
+        f'*{subject_id}*.nii.gz',
+    ]
+    found = []
+    for gt_dir in gt_dirs:
+        p = Path(gt_dir)
+        if not p.exists():
+            continue
+        for pat in patterns:
+            matches = list(p.glob(pat))
+            if matches:
+                found.append((matches[0], gt_dir))
+                break  # one match per directory
+    return found
+
+
 def run_fold(held_out, labels_dir, gt_dirs, output_dir, checkpoint,
              epochs, steps_per_epoch, intensity_priors_dir):
 
@@ -212,23 +232,25 @@ def run_fold(held_out, labels_dir, gt_dirs, output_dir, checkpoint,
         subject_id = match.group(1)
         hemisphere = match.group(2).lower()
 
-        gt_path = find_gt(gt_dirs, subject_id, hemisphere)
-        if gt_path is None:
+        gt_matches = find_all_gts(gt_dirs, subject_id, hemisphere)
+        if not gt_matches:
             print(f"  [{held_out}] No GT found for {subject_id} {hemisphere}")
             continue
 
-        res = evaluate.evaluate(
-            seg_path, gt_path,
-            subject_id=subject_id,
-            hemi=hemisphere,
-            save_output=False,
-        )
-        if res:
-            res['held_out_subject'] = held_out
-            fold_results.append(res)
-            print(f"  [{held_out}] {subject_id} {hemisphere}: "
-                  f"Dice={res['dice']:.4f}  Prec={res['precision']:.4f}  "
-                  f"Recall={res['recall']:.4f}  IoU={res['iou']:.4f}")
+        for gt_path, gt_dir in gt_matches:
+            res = evaluate.evaluate(
+                seg_path, gt_path,
+                subject_id=subject_id,
+                hemi=hemisphere,
+                save_output=False,
+            )
+            if res:
+                res['held_out_subject'] = held_out
+                res['gt_dir'] = gt_dir
+                fold_results.append(res)
+                print(f"  [{held_out}] {subject_id} {hemisphere} [{os.path.basename(gt_dir)}]: "
+                      f"Dice={res['dice']:.4f}  Prec={res['precision']:.4f}  "
+                      f"Recall={res['recall']:.4f}  IoU={res['iou']:.4f}")
 
     # Save fold results
     with open(results_path, 'w') as f:

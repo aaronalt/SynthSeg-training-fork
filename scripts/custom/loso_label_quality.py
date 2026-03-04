@@ -127,10 +127,13 @@ def collect_results(output_dir, subjects):
         with open(results_path) as f:
             fold_results = json.load(f)
         for r in fold_results:
+            gt_dir = r.get('gt_dir', '')
             rows.append({
                 'subject':    r.get('held_out_subject', subject),
                 'subject_id': r.get('subject_id'),
                 'hemisphere': r.get('hemisphere'),
+                'gt_dir':     gt_dir,
+                'gt_type':    os.path.basename(gt_dir) if gt_dir else '',
                 'dice':       r.get('dice'),
                 'precision':  r.get('precision'),
                 'recall':     r.get('recall'),
@@ -144,7 +147,23 @@ def collect_results(output_dir, subjects):
 
 def print_quality_report(df, dice_thresh, recall_thresh):
     """Print ranked quality report and flag outliers."""
-    # Average LH + RH per subject
+    # Print per-GT-type breakdown if multiple GT types present
+    if 'gt_type' in df.columns and df['gt_type'].nunique() > 1:
+        print(f"\n{'='*70}")
+        print("PER GT-TYPE SUMMARY")
+        print(f"{'='*70}")
+        gt_summary = df.groupby('gt_type').agg(
+            n=('dice', 'count'),
+            dice_mean=('dice', 'mean'),
+            dice_std=('dice', 'std'),
+            recall_mean=('recall', 'mean'),
+        ).reset_index()
+        for _, row in gt_summary.iterrows():
+            print(f"  {row['gt_type']:<20} n={int(row['n']):>3}  "
+                  f"Dice={row['dice_mean']:.4f}±{row['dice_std']:.4f}  "
+                  f"Recall={row['recall_mean']:.4f}")
+
+    # Average LH + RH per subject (over all GT types)
     summary = df.groupby('subject').agg(
         dice_mean=('dice', 'mean'),
         dice_min=('dice', 'min'),

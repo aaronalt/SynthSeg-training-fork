@@ -25,7 +25,6 @@ import shutil
 # === CONFIGURATION ===
 # High-quality 3T subjects to add to validation (manual curation)
 # HIGH_QUALITY_3T_VALIDATION = ['sub-7796', 'sub-8510']
-version = 'clau_50x'
 
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
@@ -251,6 +250,5 @@ training(all_train_paths,
          max_res_aniso=max_res_aniso,
          prior_means=means,
          prior_stds=stds,
-         label_weights=label_weights,
-         train_version=version
+         label_weights=label_weights
          )

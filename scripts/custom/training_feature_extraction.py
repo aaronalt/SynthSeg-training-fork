@@ -127,6 +127,7 @@ def training(labels_dir,
 
     # save all training parameters
     save_training_params(model_dir, {
+		'version': train_version,
         'labels_dir': labels_dir,
         'val_path': val_path,
         'checkpoint': checkpoint,

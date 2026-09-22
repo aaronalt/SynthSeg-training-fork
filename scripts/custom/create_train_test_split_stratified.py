@@ -270,7 +270,8 @@ def create_train_test_split(base_dirs_with_subdirs,
                            test_ratio=0.2,
                            seed=42,
                            prob_mode='sqrt',
-                           verbose=True):
+                           verbose=True,
+                           exclude_subjects=None): 
     """
     Create subject-aware stratified train/test split.
 
@@ -282,9 +283,7 @@ def create_train_test_split(base_dirs_with_subdirs,
         seed: Random seed for reproducibility
         prob_mode: Probability weighting mode ('uniform', 'balanced', 'sqrt', or dict)
         verbose: Print progress messages
-
-    Returns:
-        tuple: (train_path, test_path, train_probs, val_probs)
+        exclude_subjects: List or set of subject IDs/strings to exclude from the split
     """
 
     if verbose:
@@ -295,13 +294,31 @@ def create_train_test_split(base_dirs_with_subdirs,
 
     all_files = collect_all_labels(base_dirs_with_subdirs)
 
+    # === 2. Add subject filtering logic ===
+    if exclude_subjects:
+        exclude_set = set(exclude_subjects)
+        original_count = len(all_files)
+        
+        # Filters out any file dictionary where 'subject_id'/'subject' matches 
+        # or where the subject string appears in the file dictionary/path
+        all_files = [
+            f for f in all_files
+            if f.get('subject_id') not in exclude_set
+            and f.get('subject') not in exclude_set
+            and not any(subj in str(f) for subj in exclude_set)
+        ]
+        
+        if verbose:
+            removed_count = original_count - len(all_files)
+            print(f"Excluded {len(exclude_set)} subject ID(s) ({removed_count} files removed).")
+
     if len(all_files) == 0:
         if verbose:
             print("\nNo files found!")
         return None, None, None, None
 
     if verbose:
-        print(f"\nTotal files collected: {len(all_files)}")
+        print(f"Total files collected after exclusions: {len(all_files)}")
 
     # Split by subject
     train_files, test_files = create_subject_split(all_files, test_ratio, seed)
@@ -337,6 +354,7 @@ def create_train_test_split(base_dirs_with_subdirs,
         'test_ratio': test_ratio,
         'seed': seed,
         'prob_mode': str(prob_mode),
+        'exclude_subjects': list(exclude_subjects) if exclude_subjects else [],  # <--- 3. Log excluded subjects in config
         'base_dirs': [
             {'base_dir': str(e['base_dir']), 'subdirs': e['subdirs'],
              'field_strength': e['field_strength']}

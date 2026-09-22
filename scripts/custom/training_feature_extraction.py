@@ -119,7 +119,8 @@ def training(labels_dir,
              skip_pretrain=False,
              finetune=False,
              validation_steps=100,
-             label_weights=None):
+             label_weights=None,
+			 train_version=train_version):
 
     # check epochs
     assert (wl2_epochs > 0) | (dice_epochs > 0), \

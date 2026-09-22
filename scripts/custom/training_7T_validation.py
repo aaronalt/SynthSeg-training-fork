@@ -1,6 +1,10 @@
 """
 SynthSeg training script for claustrum segmentation
-NEW APPROACH: 80% 7T train, 20% 7T validation + selected high-quality 3T validation
+APPROACH: 80% 7T train, 20% 7T validation + selected high-quality 3T validation
+#######
+Version: clau_50x
+Changelog: -Claustrum weighted 50x –removed high quality 3T validation (all 7t now) 
+#######
 """
 
 import os
@@ -20,7 +24,7 @@ import shutil
 
 # === CONFIGURATION ===
 # High-quality 3T subjects to add to validation (manual curation)
-HIGH_QUALITY_3T_VALIDATION = ['sub-7796', 'sub-8510']
+# HIGH_QUALITY_3T_VALIDATION = ['sub-7796', 'sub-8510']
 
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
@@ -38,10 +42,6 @@ split_dir_3T = f'/home/althause/data/training_split_3T/{experiment_name}'
 os.makedirs(split_dir_7T, exist_ok=True)
 os.makedirs(split_dir_3T, exist_ok=True)
 
-print("\n" + "="*70)
-print("NEW TRAINING APPROACH: 7T-focused validation")
-print("="*70)
-
 # === STEP 1: Split 7T data (80% train, 20% validation) ===
 print("\n--- Step 1: Splitting 7T data (80% train, 20% validation) ---")
 train_path_7T, val_path_7T, _, val_probs_7T = create_train_test_split(
@@ -58,6 +58,7 @@ train_path_7T, val_path_7T, _, val_probs_7T = create_train_test_split(
     seed=42,
     prob_mode='uniform',
     verbose=True,
+    exclude_subjects=['sub-8510', 'sub-8399', 'sub-7796', 'sub-8233']
 )
 
 # Get 7T validation subject IDs
@@ -73,7 +74,7 @@ print(f"7T validation path: {val_path_7T}")
 
 # === STEP 2: Add high-quality 3T subjects to validation ===
 print("\n--- Step 2: Adding high-quality 3T subjects to validation ---")
-print(f"High-quality 3T subjects for validation: {HIGH_QUALITY_3T_VALIDATION}")
+# print(f"High-quality 3T subjects for validation: {HIGH_QUALITY_3T_VALIDATION}")
 
 # Create combined validation directory
 combined_val_dir = os.path.join(split_dir_7T, 'val_combined')
@@ -89,6 +90,7 @@ for f in sorted(val_7T_path.glob('*.nii.gz')):
         n_7T_val += 1
 
 # Add high-quality 3T validation files
+'''
 source_3T_dir = Path('/home/althause/data/3T/training_labels_native/t1w')
 n_3T_val = 0
 for f in sorted(source_3T_dir.glob('*.nii.gz')):
@@ -98,12 +100,12 @@ for f in sorted(source_3T_dir.glob('*.nii.gz')):
         if not os.path.exists(dest):
             os.symlink(f.resolve(), dest)
             n_3T_val += 1
-
-print(f"Combined validation set: {n_7T_val} 7T files + {n_3T_val} 3T files = {n_7T_val + n_3T_val} total")
+'''
+# print(f"Combined validation set: {n_7T_val} 7T files + {n_3T_val} 3T files = {n_7T_val + n_3T_val} total")
 
 # Create validation probability distribution (uniform across all val files)
 # BrainGenerator expects a numpy array with one probability per file (not per subject)
-val_subjects_combined = list(val_subjects_7T) + HIGH_QUALITY_3T_VALIDATION
+val_subjects_combined = list(val_subjects_7T) # + HIGH_QUALITY_3T_VALIDATION
 n_total_val_files = n_7T_val + n_3T_val
 val_probs_combined = np.ones(n_total_val_files, dtype='float32') / n_total_val_files  # Uniform
 
@@ -121,7 +123,7 @@ split_summary = {
     'experiment': experiment_name,
     'train_7T_subjects': sorted(train_subjects_7T),
     'val_7T_subjects': sorted(val_subjects_7T),
-    'val_3T_subjects': HIGH_QUALITY_3T_VALIDATION,
+    # 'val_3T_subjects': HIGH_QUALITY_3T_VALIDATION,
     'n_train_files': n_train,
     'n_val_7T_files': n_7T_val,
     'n_val_3T_files': n_3T_val,
@@ -167,7 +169,7 @@ path_segmentation_labels = path_generation_labels.copy()
 # Label weights for Dice loss (Claustrum=10, others=1)
 label_weights = np.ones(len(path_segmentation_labels))
 for lbl in [138, 139]:
-    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
+    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 50.0
 
 # Shape and resolution
 target_res = 0.50

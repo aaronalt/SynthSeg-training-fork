@@ -107,7 +107,7 @@ for f in sorted(source_3T_dir.glob('*.nii.gz')):
 # Create validation probability distribution (uniform across all val files)
 # BrainGenerator expects a numpy array with one probability per file (not per subject)
 val_subjects_combined = list(val_subjects_7T) # + HIGH_QUALITY_3T_VALIDATION
-n_total_val_files = n_7T_val + n_3T_val
+n_total_val_files = n_7T_val # + n_3T_val
 val_probs_combined = np.ones(n_total_val_files, dtype='float32') / n_total_val_files  # Uniform
 
 # === STEP 3: Training data = 80% 7T only (no 3T in training) ===
@@ -127,7 +127,7 @@ split_summary = {
     # 'val_3T_subjects': HIGH_QUALITY_3T_VALIDATION,
     'n_train_files': n_train,
     'n_val_7T_files': n_7T_val,
-    'n_val_3T_files': n_3T_val,
+    # 'n_val_3T_files': n_3T_val,
 }
 with open(os.path.join(path_model_dir, 'split_summary.json'), 'w') as f:
     json.dump(split_summary, f, indent=2)
@@ -136,7 +136,7 @@ print("\n" + "="*70)
 print("TRAINING CONFIGURATION SUMMARY")
 print("="*70)
 print(f"Training: {n_train} files (80% 7T)")
-print(f"Validation: {n_7T_val} 7T + {n_3T_val} 3T = {n_7T_val + n_3T_val} files")
+# print(f"Validation: {n_7T_val} 7T + {n_3T_val} 3T = {n_7T_val + n_3T_val} files")
 print(f"Validation subjects: {sorted(val_subjects_combined)}")
 print("="*70 + "\n")
 

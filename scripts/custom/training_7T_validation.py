@@ -1,11 +1,12 @@
 """
 SynthSeg training script for claustrum segmentation
-APPROACH: 80% 7T train, 20% 7T validation + selected high-quality 3T validation
+APPROACH: 80% 7T train, 20% 7T validation 
 #######
-Version: clau_50x
-Changelog: -Claustrum weighted 50x –removed high quality 3T validation (all 7t now) 
+Version: only_quality_labels_clau10x
+Changelog: -Claustrum weighted 10x -removed labels with low LOSO scores (5 subjects) -same labels used as clau_50x model
 #######
 """
+version = 'only_quality_labels_clau10x'
 
 import os
 import tensorflow as tf
@@ -30,7 +31,7 @@ import shutil
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 
 # Experiment setup
-experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
 path_model_dir = os.path.join('./models/test', experiment_name)
 os.makedirs(path_model_dir, exist_ok=True)
 log_dir = os.path.join(path_model_dir, 'logs')
@@ -169,7 +170,7 @@ path_segmentation_labels = path_generation_labels.copy()
 # Label weights for Dice loss (Claustrum=10, others=1)
 label_weights = np.ones(len(path_segmentation_labels))
 for lbl in [138, 139]:
-    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 50.0
+    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Shape and resolution
 target_res = 0.50

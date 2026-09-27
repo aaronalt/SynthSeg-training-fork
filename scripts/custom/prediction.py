@@ -293,33 +293,34 @@ for path_model in model_files:
 
 # 2. TTA Consensus Evaluation against GT
             basename = sub.name.replace('.nii.gz', '')
-            tta_r = tta_lookup.get(basename)
-            
-            # Fallback lookup if exact basename differs
-            if not tta_r:
-                for k, v in tta_lookup.items():
-                    if subject_id in k:
-                        tta_r = v
-                        break
+
+            # Strict lookup: MUST match BOTH subject_id AND hemisphere (lh/rh)
+            tta_r = None
+            for k, v in tta_lookup.items():
+                if subject_id in k and hemisphere in k.lower():
+                    tta_r = v
+                    break
 
             if tta_r and 'seg_path' in tta_r and os.path.exists(tta_r['seg_path']):
-                # Define label based on hemisphere (138=lh, 139=rh)
                 target_label = 138 if hemisphere == 'lh' else 139
-
-                # Create a temporary single-hemisphere file for TTA evaluation
                 tta_full_path = tta_r['seg_path']
-                tta_hemi_path = tta_full_path.replace('_tta_seg.nii.gz', f'_{hemisphere}_tta_seg.nii.gz')
+                tta_hemi_path = tta_full_path.replace('_tta_seg.nii.gz', f'_{hemisphere}_eval_tmp.nii.gz')
 
-                # Extract only the target hemisphere label into a temporary NIfTI image
                 import nibabel as nib
                 img = nib.load(tta_full_path)
                 data = img.get_fdata()
-                
-                # Keep only the current hemisphere's voxels
+
+                # Extract target hemisphere label (138 for lh, 139 for rh)
                 hemi_data = np.where(data == target_label, target_label, 0).astype(np.int32)
+                
+                # Fallback: if single-hemisphere crop stored output under non-zero voxels regardless of ID
+                if np.sum(hemi_data > 0) == 0:
+                    hemi_data = np.where(data > 0, target_label, 0).astype(np.int32)
+
+                # Save temporary single-hemisphere volume for evaluate()
                 nib.save(nib.Nifti1Image(hemi_data, img.affine, img.header), tta_hemi_path)
 
-                # Evaluate the isolated hemisphere file against GT
+                # Run evaluation
                 tta_gt_results = evaluate.evaluate(
                     tta_hemi_path,
                     gt,
@@ -332,7 +333,7 @@ for path_model in model_files:
                     prediction_path=os.path.dirname(tta_hemi_path)
                 )
 
-                # Clean up the temporary file
+                # Clean up temporary file
                 if os.path.exists(tta_hemi_path):
                     os.remove(tta_hemi_path)
 
@@ -344,6 +345,8 @@ for path_model in model_files:
 
                     print(f"  Single-Pass Dice: {results.get('dice', 0):.4f} | "
                           f"TTA Ensembled Dice: {results['tta_gt_dice']:.4f}")
+            else:
+                print(f"  [TTA Notice]: Could not match TTA file for subject '{subject_id}' hemi '{hemisphere}'")
             
     # Print per-epoch summary after each model completes
     model_results = [r for r in all_model_results if r.get('model') == model]

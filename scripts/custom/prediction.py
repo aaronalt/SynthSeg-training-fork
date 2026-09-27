@@ -291,11 +291,25 @@ for path_model in model_files:
                 prediction_path=path_segm
             )
 
-            # 2. TTA Consensus Evaluation against GT
+# 2. TTA Consensus Evaluation against GT
+            # Flexible lookup: match exact basename or partial subject ID match
             basename = sub.name.replace('.nii.gz', '')
             tta_r = tta_lookup.get(basename)
+            
+            # Fallback matching if exact filename string differs
+            if not tta_r:
+                for k, v in tta_lookup.items():
+                    if subject_id in k:
+                        tta_r = v
+                        break
 
-            if tta_r and 'seg_path' in tta_r and os.path.exists(tta_r['seg_path']):
+            if not ENABLE_TTA_UNCERTAINTY:
+                print("  [TTA Skipped]: ENABLE_TTA_UNCERTAINTY is set to False")
+            elif not tta_r:
+                print(f"  [TTA Skipped]: No match found in tta_lookup for '{basename}'")
+            elif 'seg_path' not in tta_r or not os.path.exists(tta_r['seg_path']):
+                print(f"  [TTA Skipped]: File not found at path: {tta_r.get('seg_path')}")
+            else:
                 tta_gt_results = evaluate.evaluate(
                     tta_r['seg_path'],
                     gt,

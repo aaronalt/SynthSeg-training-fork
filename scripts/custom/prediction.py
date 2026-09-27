@@ -292,26 +292,36 @@ for path_model in model_files:
             )
 
 # 2. TTA Consensus Evaluation against GT
-            # Flexible lookup: match exact basename or partial subject ID match
             basename = sub.name.replace('.nii.gz', '')
             tta_r = tta_lookup.get(basename)
             
-            # Fallback matching if exact filename string differs
+            # Fallback lookup if exact basename differs
             if not tta_r:
                 for k, v in tta_lookup.items():
                     if subject_id in k:
                         tta_r = v
                         break
 
-            if not ENABLE_TTA_UNCERTAINTY:
-                print("  [TTA Skipped]: ENABLE_TTA_UNCERTAINTY is set to False")
-            elif not tta_r:
-                print(f"  [TTA Skipped]: No match found in tta_lookup for '{basename}'")
-            elif 'seg_path' not in tta_r or not os.path.exists(tta_r['seg_path']):
-                print(f"  [TTA Skipped]: File not found at path: {tta_r.get('seg_path')}")
-            else:
+            if tta_r and 'seg_path' in tta_r and os.path.exists(tta_r['seg_path']):
+                # Define label based on hemisphere (138=lh, 139=rh)
+                target_label = 138 if hemisphere == 'lh' else 139
+
+                # Create a temporary single-hemisphere file for TTA evaluation
+                tta_full_path = tta_r['seg_path']
+                tta_hemi_path = tta_full_path.replace('_tta_seg.nii.gz', f'_{hemisphere}_tta_seg.nii.gz')
+
+                # Extract only the target hemisphere label into a temporary NIfTI image
+                import nibabel as nib
+                img = nib.load(tta_full_path)
+                data = img.get_fdata()
+                
+                # Keep only the current hemisphere's voxels
+                hemi_data = np.where(data == target_label, target_label, 0).astype(np.int32)
+                nib.save(nib.Nifti1Image(hemi_data, img.affine, img.header), tta_hemi_path)
+
+                # Evaluate the isolated hemisphere file against GT
                 tta_gt_results = evaluate.evaluate(
-                    tta_r['seg_path'],
+                    tta_hemi_path,
                     gt,
                     subject_id=subject_id,
                     hemi=hemisphere,
@@ -319,8 +329,12 @@ for path_model in model_files:
                     save_output=False,
                     group=group,
                     model=path_model,
-                    prediction_path=os.path.dirname(tta_r['seg_path'])
+                    prediction_path=os.path.dirname(tta_hemi_path)
                 )
+
+                # Clean up the temporary file
+                if os.path.exists(tta_hemi_path):
+                    os.remove(tta_hemi_path)
 
                 if tta_gt_results and results:
                     results['tta_gt_dice'] = tta_gt_results.get('dice')
@@ -330,11 +344,6 @@ for path_model in model_files:
 
                     print(f"  Single-Pass Dice: {results.get('dice', 0):.4f} | "
                           f"TTA Ensembled Dice: {results['tta_gt_dice']:.4f}")
-
-            if results:
-                results['model'] = model
-                results['epoch'] = get_epoch(path_model)
-                all_model_results.append(results)
             
     # Print per-epoch summary after each model completes
     model_results = [r for r in all_model_results if r.get('model') == model]

@@ -207,6 +207,24 @@ for path_model in model_files:
     print("\nPrediction complete!")
 
     # === TTA UNCERTAINTY ESTIMATION (claustrum-focused) ===
+      # Extract all .nii.gz files across all folders in gt_dirs
+    image_files = []
+    
+    for group, path_list in gt_dirs.items():
+        for p in path_list:
+            if p.is_dir():
+                # Gather all .nii.gz files from folders (T1_CONTROL, T1_VCFS, T2, etc.)
+                image_files.extend([str(f) for f in p.glob('*.nii.gz')])
+            elif p.is_file() and p.name.endswith('.nii.gz'):
+                # Handle standalone file entries (like case16)
+                image_files.append(str(p))
+    
+    # Sort and deduplicate
+    image_files = sorted(list(set(image_files)))
+    
+    print(f"Total images found for TTA: {len(image_files)}")
+    for img in image_files:
+        print(f"  - {img}")
     tta_results_list = []
     if ENABLE_TTA_UNCERTAINTY:
         print(f"\n--- Running TTA uncertainty estimation ({N_TTA_AUGMENTATIONS} augmentations) ---")

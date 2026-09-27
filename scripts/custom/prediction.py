@@ -67,8 +67,8 @@ gt_dirs = {
         Path('/home/althause/data/claustrum_gt/7T/T2'),
     ],
     '3T': [
-        Path('/home/althause/data/claustrum_gt/3T/T1_CONTROL'),
-        Path('/home/althause/data/claustrum_gt/3T/T1_VCFS'),
+        Path('/home/althause/data/claustrum_gt/3T/T1_CONTROL_edit_08.26'),
+        Path('/home/althause/data/claustrum_gt/3T/T1_VCFS_edit_08.26'),
     ],
     'other': [
         Path('/Users/aaronalthauser/Downloads/claustrumData/high-res-manual-labels/case16_RH_LH.label.nii.gz')

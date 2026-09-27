@@ -30,7 +30,7 @@ RERUN_TMP_PREDICTIONS = False
 # === TTA UNCERTAINTY OPTIONS ===
 ENABLE_TTA_UNCERTAINTY = True       # Generate claustrum uncertainty maps via TTA
 N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
-TTA_UNCERTAINTY_TYPE = 'confidence'    # 'entropy', 'variance', 'confidence', 'mutual_information'
+TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
 TTA_STRENGTH = 0.25                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
 TTA_QUALITY_MODEL_WEIGHTS = None # '/home/althause/data/weights/quality_model_weights_features.npz'  # Ridge model (.npz) or None to skip
 
@@ -246,10 +246,14 @@ for path_model in model_files:
     for tta_r in tta_results_list:
         tta_lookup[tta_r['basename']] = tta_r
 
-    # === DICE EVALUATION ===
+# === DICE EVALUATION ===
     path_subj = Path(path_segm)
-    for sub in sorted(path_subj.glob('*nii.gz')):
-        name = sub.stem
+    for sub in sorted(path_subj.glob('*.nii.gz')):
+        # Skip evaluating TTA consensus segmentations if they are in this folder
+        if 'tta_seg' in sub.name:
+            continue
+
+        name = sub.stem.replace('.nii', '')
         match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
 
         if not match:
@@ -268,11 +272,12 @@ for path_model in model_files:
             modality = 't1w'
 
         gt = find_ground_truth(subject_id, hemisphere, modality)
-        group = field_strength  # Use auto-detected field strength
+        group = field_strength
 
         if gt:
-            print(f"Found {group} GT match for {subject_id} {hemisphere}: {gt.name}")
+            print(f"\nFound {group} GT match for {subject_id} {hemisphere}: {gt.name}")
 
+            # 1. Standard Single-Pass Evaluation
             results = evaluate.evaluate(
                 sub,
                 gt,
@@ -286,23 +291,37 @@ for path_model in model_files:
                 prediction_path=path_segm
             )
 
-            # Collect results for summary, merging TTA Dice if available
+            # 2. TTA Consensus Evaluation against GT
+            basename = sub.name.replace('.nii.gz', '')
+            tta_r = tta_lookup.get(basename)
+
+            if tta_r and 'seg_path' in tta_r and os.path.exists(tta_r['seg_path']):
+                tta_gt_results = evaluate.evaluate(
+                    tta_r['seg_path'],
+                    gt,
+                    subject_id=subject_id,
+                    hemi=hemisphere,
+                    save_resampled=False,
+                    save_output=False,
+                    group=group,
+                    model=path_model,
+                    prediction_path=os.path.dirname(tta_r['seg_path'])
+                )
+
+                if tta_gt_results and results:
+                    results['tta_gt_dice'] = tta_gt_results.get('dice')
+                    results['tta_gt_precision'] = tta_gt_results.get('precision')
+                    results['tta_gt_recall'] = tta_gt_results.get('recall')
+                    results['tta_gt_iou'] = tta_gt_results.get('iou')
+
+                    print(f"  Single-Pass Dice: {results.get('dice', 0):.4f} | "
+                          f"TTA Ensembled Dice: {results['tta_gt_dice']:.4f}")
+
             if results:
                 results['model'] = model
                 results['epoch'] = get_epoch(path_model)
-
-                # Match TTA results by basename (strip .nii from sub.stem)
-                basename = sub.name.replace('.nii.gz', '')
-                tta_r = tta_lookup.get(basename)
-                if tta_r:
-                    results['tta_dice'] = tta_r.get('tta_dice')
-                    results['tta_dice_lh'] = tta_r.get('tta_dice_lh')
-                    results['tta_dice_rh'] = tta_r.get('tta_dice_rh')
-                    print(f"  Actual Dice: {results.get('dice', 'N/A'):.4f}  |  "
-                          f"TTA Dice: {results['tta_dice']:.4f}")
-
                 all_model_results.append(results)
-
+            
     # Print per-epoch summary after each model completes
     model_results = [r for r in all_model_results if r.get('model') == model]
     if model_results and 'dice' in model_results[0]:

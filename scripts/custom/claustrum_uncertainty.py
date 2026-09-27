@@ -321,6 +321,94 @@ def compute_tta_dice(all_posteriors, labels_segmentation,
         pairwise_dices=pairwise,
     )
 
+import numpy as np
+
+def compute_claustrum_gt_metrics(all_posteriors, gt_segmentation, labels_segmentation,
+                                claustrum_labels=None):
+    """
+    Compute Ground Truth evaluation metrics (Dice, IoU, Precision, Recall)
+    from TTA mean-ensembled posteriors restricted to claustrum labels.
+
+    Args:
+        all_posteriors: (N, H, W, D, n_labels) array of TTA posterior probabilities
+        gt_segmentation: (H, W, D) array of ground truth integer label values
+        labels_segmentation: 1-D array of label values in channel order
+        claustrum_labels: [138, 139] by default
+
+    Returns:
+        dict with keys:
+            dice_combined: float — Dice score across all claustrum labels combined
+            iou_combined: float — IoU score across all claustrum labels combined
+            dice_per_label: dict {label: float} — per-hemisphere Dice scores
+            iou_per_label: dict {label: float} — per-hemisphere IoU scores
+            precision_per_label: dict {label: float} — per-hemisphere Precision
+            recall_per_label: dict {label: float} — per-hemisphere Recall
+            consensus_seg: (H, W, D) array — argmax segmentation from mean posteriors
+    """
+    if claustrum_labels is None:
+        claustrum_labels = CLAUSTRUM_LABELS
+
+    labels_segmentation = np.asarray(labels_segmentation)
+    gt_segmentation = np.asarray(gt_segmentation)
+
+    # 1. Ensemble TTA posteriors via mean pooling
+    mean_posteriors = np.mean(all_posteriors, axis=0)  # (H, W, D, n_labels)
+
+    # 2. Derive single consensus hard segmentation
+    seg_indices = np.argmax(mean_posteriors, axis=-1)  # (H, W, D)
+    consensus_seg = labels_segmentation[seg_indices]  # (H, W, D)
+
+    def _compute_binary_metrics(pred_mask, gt_mask):
+        """Helper to compute overlap metrics between two boolean masks."""
+        tp = np.sum(pred_mask & gt_mask)
+        fp = np.sum(pred_mask & ~gt_mask)
+        fn = np.sum(~pred_mask & gt_mask)
+
+        union_iou = tp + fp + fn
+        union_dice = 2 * tp + fp + fn
+
+        dice = float(2.0 * tp / union_dice) if union_dice > 0 else np.nan
+        iou = float(tp / union_iou) if union_iou > 0 else np.nan
+        precision = float(tp / (tp + fp)) if (tp + fp) > 0 else np.nan
+        recall = float(tp / (tp + fn)) if (tp + fn) > 0 else np.nan
+
+        return dice, iou, precision, recall
+
+    # 3. Compute per-label metrics
+    dice_per_label = {}
+    iou_per_label = {}
+    precision_per_label = {}
+    recall_per_label = {}
+
+    pred_combined = np.zeros(gt_segmentation.shape, dtype=bool)
+    gt_combined = np.zeros(gt_segmentation.shape, dtype=bool)
+
+    for cl in claustrum_labels:
+        cl_val = int(cl)
+        pred_mask = (consensus_seg == cl_val)
+        gt_mask = (gt_segmentation == cl_val)
+
+        pred_combined |= pred_mask
+        gt_combined |= gt_mask
+
+        d, i, p, r = _compute_binary_metrics(pred_mask, gt_mask)
+        dice_per_label[cl_val] = d
+        iou_per_label[cl_val] = i
+        precision_per_label[cl_val] = p
+        recall_per_label[cl_val] = r
+
+    # 4. Compute combined claustrum metrics
+    dice_comb, iou_comb, _, _ = _compute_binary_metrics(pred_combined, gt_combined)
+
+    return dict(
+        dice_combined=dice_comb,
+        iou_combined=iou_comb,
+        dice_per_label=dice_per_label,
+        iou_per_label=iou_per_label,
+        precision_per_label=precision_per_label,
+        recall_per_label=recall_per_label,
+        consensus_seg=consensus_seg,
+    )
 
 # ===================================================================
 # SECTION 3: QUALITY PREDICTION — 2-SUBNETWORK CNN (3D)

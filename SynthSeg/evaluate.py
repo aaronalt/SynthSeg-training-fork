@@ -341,7 +341,7 @@ def evaluation(gt_dir,
                 print('Ground-truth shape:', gt_labels.shape, flush=True)
                 print('Prediction shape:', seg.shape, flush=True)
 
-dice_coefs[:n_labels, idx] = fast_dice(gt_labels, seg, label_list)
+            dice_coefs[:n_labels, idx] = fast_dice(gt_labels, seg, label_list)
 
             # compute Dice scores for whole structures
             if compute_score_whole_structure:

@@ -384,7 +384,7 @@ if __name__ == '__main__':
 
     experiment_dir = os.path.join(args.model_dir, args.exp)
     validation_main_dir = os.path.join(experiment_dir, 'validation')
-
+'''
     validate_training(str(test),
                       gt_all,
                       experiment_dir,
@@ -407,14 +407,15 @@ if __name__ == '__main__':
                       activation=params.get('activation', 'elu'),
                       recompute=False)
     print("Validation completed. Results saved in:", validation_main_dir)
-
 '''
-    list_validation_dirs = [v for v in validation_main_dir]
+
+    list_validation_dirs = [v for v in experiment_dir]
+    print("Validation directories found:", list_validation_dirs)
     plot_validation_curves(list_validation_dirs, architecture_names=None, eval_indices=None,
                            skip_first_dice_row=True, size_max_circle=100, figsize=(11, 6), y_lim=None, fontsize=18,
                            list_linestyles=None, list_colours=None, plot_legend=False, draw_line=None)
 
-    
+    '''
     list_tensorboard_files = []
     for v in list_validation_dirs:
         tbf = v

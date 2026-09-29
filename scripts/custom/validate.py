@@ -307,13 +307,15 @@ def draw_learning_curve(path_tensorboard_files, architecture_names, figsize=(11,
 
 def get_combined_sorted_files(dir1, dir2):
     combined_files = []
+    image_extensions = ('.nii.gz', '.nii', '.mgz', '.npz')
 
     # Extract files from both directories
     for directory in (dir1, dir2):
         folder_path = Path(directory)
         if folder_path.exists() and folder_path.is_dir():
             # Add only files (skip sub-directories)
-            combined_files.extend([f for f in folder_path.iterdir() if f.is_file()])
+            combined_files.extend([f for f in folder_path.iterdir()
+                                   if f.is_file() and f.name.lower().endswith(image_extensions)])
 
     # Sort the combined list alphabetically by the file name (case-insensitive)
     combined_files.sort(key=lambda filepath: filepath.name.lower())
@@ -338,6 +340,8 @@ if __name__ == '__main__':
     test = Path('/home/althause/data/TEST')
     test_unsorted = test.glob('*.nii.gz')
     test_all = sorted(test_unsorted)
+    if len(test_all) != len(gt_all):
+        raise ValueError('Found {} test images but {} ground-truth images'.format(len(test_all), len(gt_all)))
 
     # Load training params
     json_path = os.path.join(args.model_dir, args.exp, 'training_params.json')

@@ -346,8 +346,7 @@ if __name__ == '__main__':
     json_path = os.path.join(args.model_dir, args.exp, 'training_params.json')
     with open(json_path, 'r') as f:
         params = json.load(f)
-    print(f"Loaded training parameters from {json_path}")
-    print(json.dumps(params, indent=4))
+
     seg_labels = np.array(params['segmentation_labels'])
     topo_classes = np.array(params['generation_classes'])
 

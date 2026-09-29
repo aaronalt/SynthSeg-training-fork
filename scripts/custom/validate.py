@@ -370,6 +370,9 @@ if __name__ == '__main__':
     test_unsorted = test.glob('*.nii.gz')
     test_all = sorted(test_unsorted, key=lambda filepath: filepath.name.lower())
     gt_all = match_ground_truth_files(test_all, gt_all)
+    print('Validation image/ground-truth pairs:', flush=True)
+    for pair_index, (image_file, ground_truth_file) in enumerate(zip(test_all, gt_all)):
+        print('{}: {} -> {}'.format(pair_index, image_file.name, ground_truth_file.name), flush=True)
 
     # Load training params
     json_path = os.path.join(args.model_dir, args.exp, 'training_params.json')

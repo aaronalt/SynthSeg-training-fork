@@ -15,7 +15,11 @@ License.
 
 
 # python imports
+import sys
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Cleans up logs
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+os.environ['KERAS_BACKEND'] = 'tensorflow'
 import re
 import logging
 from pathlib import Path

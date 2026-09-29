@@ -340,7 +340,7 @@ if __name__ == '__main__':
 
     test = Path('/home/althause/data/TEST')
     test_unsorted = test.glob('*.nii.gz')
-    test_all = test_unsorted.sort(key=lambda filepath: filepath.name.lower())
+    test_all = sorted(test_unsorted)
 
     # Load training params
     json_path = os.path.join(args.model_dir, 'training_params.json')

@@ -136,8 +136,6 @@ def validate_training(image_dir,
                     evaluation_labels=evaluation_labels,
                     recompute=recompute,
                     verbose=True)
-                else:
-                    print('Skipping {} because {} already exists'.format(os.path.basename(path_model), dice_path))
 
 
 def plot_validation_curves(list_validation_dirs, architecture_names=None, eval_indices=None,
@@ -321,12 +319,6 @@ def get_combined_sorted_files(dir1, dir2):
     combined_files.sort(key=lambda filepath: filepath.name.lower())
 
     return combined_files
-
-
-# --- Example Usage ---
-# sorted_paths = get_combined_sorted_files('./folder_A', './folder_B')
-# for file_path in sorted_paths:
-#     print(file_path.name)
 
 
 if __name__ == '__main__':

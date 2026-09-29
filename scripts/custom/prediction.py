@@ -10,8 +10,7 @@ import keras
 import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
-from SynthSeg.evaluate import evaluation 
-from evaluate import match_ground_truth_files
+from SynthSeg.evaluate import evaluation, match_ground_truth_files
 import numpy as np
 from glob import glob
 import json

@@ -334,6 +334,15 @@ def evaluation(gt_dir,
             # compute Dice scores
             dice_coefs[:n_labels, idx] = fast_dice(gt_labels, seg, label_list)
 
+            if gt_labels.shape != seg.shape:
+                print('\nShape mismatch at evaluation index {}'.format(idx), flush=True)
+                print('Ground truth:', path_gt, flush=True)
+                print('Prediction:', path_seg, flush=True)
+                print('Ground-truth shape:', gt_labels.shape, flush=True)
+                print('Prediction shape:', seg.shape, flush=True)
+
+dice_coefs[:n_labels, idx] = fast_dice(gt_labels, seg, label_list)
+
             # compute Dice scores for whole structures
             if compute_score_whole_structure:
                 temp_gt = (gt_labels > 0) * 1

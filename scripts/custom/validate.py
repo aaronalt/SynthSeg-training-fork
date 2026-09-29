@@ -350,7 +350,7 @@ if __name__ == '__main__':
     experiment_dir = os.path.join(args.model_dir, args.exp)
     validation_main_dir = os.path.join(experiment_dir, 'validation')
 
-    validate_training(test_all,
+    validate_training(str(test),
                       gt_all,
                       experiment_dir,
                       validation_main_dir,

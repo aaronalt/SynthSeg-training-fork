@@ -269,7 +269,11 @@ def evaluation(gt_dir,
     if compute_dice | any(compute_hd) | compute_mean_dist | recompute:
 
         # get list label maps to compare
-        path_gt_labels = utils.list_images_in_folder(gt_dir)
+        if isinstance(gt_dir, (list, tuple)):
+            path_gt_labels = sorted([os.fspath(path) for path in gt_dir],
+                                    key=lambda path: os.path.basename(path).lower())
+        else:
+            path_gt_labels = utils.list_images_in_folder(gt_dir)
         path_segs = utils.list_images_in_folder(seg_dir)
         path_gt_labels = utils.reformat_to_list(path_gt_labels, length=len(path_segs))
         if len(path_gt_labels) != len(path_segs):

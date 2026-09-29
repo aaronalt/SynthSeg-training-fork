@@ -343,7 +343,7 @@ if __name__ == '__main__':
     test_all = sorted(test_unsorted)
 
     # Load training params
-    json_path = os.path.join(args.model_dir, 'training_params.json')
+    json_path = os.path.join(args.model_dir, args.exp, 'training_params.json')
     with open(json_path, 'r') as f:
         params = json.load(f)
 

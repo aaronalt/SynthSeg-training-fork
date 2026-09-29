@@ -251,7 +251,7 @@ for path_model in model_files:
         path_segm, 
         label_list=[138,139],
         path_dice=path_segm,
-        path_hausddorff=path_segm,
+        path_hausdorff=path_segm,
         path_mean_distance=path_segm)
 
     '''

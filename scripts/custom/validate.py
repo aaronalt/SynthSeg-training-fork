@@ -354,7 +354,7 @@ if __name__ == '__main__':
 
     validate_training(test_all,
                       gt_all,
-                      args.models_dir,
+                      args.model_dir,
                       validation_main_dir,
                       seg_labels,
                       n_neutral_labels=args.n_neutral_labels,

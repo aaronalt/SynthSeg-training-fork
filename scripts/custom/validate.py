@@ -339,7 +339,7 @@ if __name__ == '__main__':
 
     test = Path('/home/althause/data/TEST')
     test_unsorted = test.glob('*.nii.gz')
-    test_all = sorted(test_unsorted)
+    test_all = sorted(test_unsorted, key=lambda filepath: filepath.name.lower())
     if len(test_all) != len(gt_all):
         raise ValueError('Found {} test images but {} ground-truth images'.format(len(test_all), len(gt_all)))
 

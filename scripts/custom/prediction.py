@@ -10,6 +10,8 @@ import keras
 import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
+from SynthSeg.evaluate import evaluation 
+from evaluate import match_ground_truth_files
 import numpy as np
 from glob import glob
 import json
@@ -57,7 +59,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260923_093722_only_quality_labels_clau10x' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[29:]
+# model_files = model_files[:]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
@@ -101,10 +103,12 @@ def get_epoch(f):
     match = re.search(r'_(\d+)_\d+\.h5$', f)
     return int(match.group(1)) if match else 0
 
-model_files = sorted(model_files, key=get_epoch)
 
-print(f"Found {len(model_files)} model checkpoints to evaluate")
-print(f"Models: {[os.path.basename(f) for f in model_files]}")
+#############
+# Prediction
+#############
+
+model_files = sorted(model_files, key=get_epoch)
 
 for path_model in model_files:
     # Paths
@@ -205,6 +209,23 @@ for path_model in model_files:
             activation=activation)
 
     print("\nPrediction complete!")
+
+
+    ##############
+    ## Evaluation
+    ##############
+
+    gt_all = match_ground_truth_files(path_segm, active_gt_dirs)
+
+    evaluation(
+        gt_all, 
+        path_segm, 
+        label_list=[138,139],
+        path_dice=path_segm,
+        path_hausddorff=path_segm,
+        path_mean_distance=path_segm)
+
+    '''
 
     # === TTA UNCERTAINTY ESTIMATION (claustrum-focused) ===
       # Extract all .nii.gz files across all folders in gt_dirs
@@ -483,3 +504,4 @@ if all_model_results:
                     activation=activation)
 
             print(f"\nBest model predictions saved to: {path_segm_final}")
+'''

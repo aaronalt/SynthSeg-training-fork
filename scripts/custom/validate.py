@@ -305,26 +305,8 @@ def draw_learning_curve(path_tensorboard_files, architecture_names, figsize=(11,
     plt.show()
 
 
-def get_combined_sorted_files(dir1, dir2):
-    combined_files = []
-    image_extensions = ('.nii.gz', '.nii', '.mgz', '.npz')
-
-    # Extract files from both directories
-    for directory in (dir1, dir2):
-        folder_path = Path(directory)
-        if folder_path.exists() and folder_path.is_dir():
-            # Add only files (skip sub-directories)
-            combined_files.extend([f for f in folder_path.iterdir()
-                                   if f.is_file() and f.name.lower().endswith(image_extensions)])
-
-    # Sort the combined list alphabetically by the file name (case-insensitive)
-    combined_files.sort(key=lambda filepath: filepath.name.lower())
-
-    return combined_files
-
-
-def match_ground_truth_files(image_files, ground_truth_files):
-    """Order ground-truth files by subject ID and hemisphere from image filenames."""
+def get_combined_sorted_files(image_files, ground_truth_files):
+    """Return the second file set in the first set's subject/hemi order."""
     pattern = re.compile(r'(\d+).*?(lh|rh)', re.IGNORECASE)
     ground_truth_by_key = {}
     for ground_truth_file in ground_truth_files:
@@ -338,16 +320,20 @@ def match_ground_truth_files(image_files, ground_truth_files):
         ground_truth_by_key[key] = ground_truth_file
 
     matched_ground_truth = []
+    image_keys = set()
     for image_file in image_files:
         match = pattern.search(image_file.name)
         if match is None:
             raise ValueError('Could not extract subject ID and hemisphere from test image {}'.format(image_file))
         key = (match.group(1), match.group(2).lower())
+        if key in image_keys:
+            raise ValueError('Duplicate test image for subject {} {}'.format(*key))
+        image_keys.add(key)
         if key not in ground_truth_by_key:
             raise ValueError('No ground truth found for subject {} {}'.format(*key))
         matched_ground_truth.append(ground_truth_by_key[key])
 
-    if len(matched_ground_truth) != len(ground_truth_files):
+    if image_keys != set(ground_truth_by_key):
         raise ValueError('Ground-truth files contain subjects not present in the test images')
     return matched_ground_truth
 
@@ -364,15 +350,19 @@ if __name__ == '__main__':
                         help='Training experiment name')
     args = parser.parse_args()
 
-    gt_all = get_combined_sorted_files('/home/althause/data/claustrum_gt/3T/T1_CONTROL_edit_08.26', '/home/althause/data/claustrum_gt/3T/T1_VCFS_edit_08.26')
+    ground_truth_dirs = (
+        '/home/althause/data/claustrum_gt/3T/T1_CONTROL_edit_08.26',
+        '/home/althause/data/claustrum_gt/3T/T1_VCFS_edit_08.26')
+    image_extensions = ('.nii.gz', '.nii', '.mgz', '.npz')
+    gt_all = [file_path for directory in ground_truth_dirs
+              for folder in [Path(directory)] if folder.is_dir()
+              for file_path in folder.iterdir()
+              if file_path.is_file() and file_path.name.lower().endswith(image_extensions)]
 
     test = Path('/home/althause/data/TEST')
     test_unsorted = test.glob('*.nii.gz')
     test_all = sorted(test_unsorted, key=lambda filepath: filepath.name.lower())
-    gt_all = match_ground_truth_files(test_all, gt_all)
-    print('Validation image/ground-truth pairs:', flush=True)
-    for pair_index, (image_file, ground_truth_file) in enumerate(zip(test_all, gt_all)):
-        print('{}: {} -> {}'.format(pair_index, image_file.name, ground_truth_file.name), flush=True)
+    gt_all = get_combined_sorted_files(test_all, gt_all)
 
     # Load training params
     json_path = os.path.join(args.model_dir, args.exp, 'training_params.json')
@@ -409,7 +399,9 @@ if __name__ == '__main__':
     print("Validation completed. Results saved in:", validation_main_dir)
     '''
 
-    list_validation_dirs = [v for v in experiment_dir]
+    list_validation_dirs = sorted(
+        [v for v in Path(experiment_dir).iterdir() if v.is_dir()],
+        key=lambda path: path.name.lower())
     print("Validation directories found:", list_validation_dirs)
     plot_validation_curves(list_validation_dirs, architecture_names=None, eval_indices=None,
                            skip_first_dice_row=True, size_max_circle=100, figsize=(11, 6), y_lim=None, fontsize=18,

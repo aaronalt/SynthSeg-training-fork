@@ -98,8 +98,7 @@ def evaluate(mauri_path, manual_path, subject_id=None, hemi=None,
     mauri_nii = nib.load(mauri_path)
     manual_nii = nib.load(manual_path)
 
-    # 2. Resample PREDICTION to MANUAL space
-    # This direction is more stable for small, thin structures
+    # 2. Resample Mauri PREDICTION to MANUAL space
     print(f"  Resampling to Manual space...")
     mauri_resampled_nii = resample_to_target(mauri_nii, manual_nii)
 

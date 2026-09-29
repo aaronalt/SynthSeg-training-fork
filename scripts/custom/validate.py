@@ -323,6 +323,35 @@ def get_combined_sorted_files(dir1, dir2):
     return combined_files
 
 
+def match_ground_truth_files(image_files, ground_truth_files):
+    """Order ground-truth files by subject ID and hemisphere from image filenames."""
+    pattern = re.compile(r'(\d+).*?(lh|rh)', re.IGNORECASE)
+    ground_truth_by_key = {}
+    for ground_truth_file in ground_truth_files:
+        match = pattern.search(ground_truth_file.name)
+        if match is None:
+            raise ValueError('Could not extract subject ID and hemisphere from ground truth {}'.format(
+                ground_truth_file))
+        key = (match.group(1), match.group(2).lower())
+        if key in ground_truth_by_key:
+            raise ValueError('Duplicate ground truth for subject {} {}'.format(*key))
+        ground_truth_by_key[key] = ground_truth_file
+
+    matched_ground_truth = []
+    for image_file in image_files:
+        match = pattern.search(image_file.name)
+        if match is None:
+            raise ValueError('Could not extract subject ID and hemisphere from test image {}'.format(image_file))
+        key = (match.group(1), match.group(2).lower())
+        if key not in ground_truth_by_key:
+            raise ValueError('No ground truth found for subject {} {}'.format(*key))
+        matched_ground_truth.append(ground_truth_by_key[key])
+
+    if len(matched_ground_truth) != len(ground_truth_files):
+        raise ValueError('Ground-truth files contain subjects not present in the test images')
+    return matched_ground_truth
+
+
 if __name__ == '__main__':
     import argparse
     import json
@@ -340,8 +369,7 @@ if __name__ == '__main__':
     test = Path('/home/althause/data/TEST')
     test_unsorted = test.glob('*.nii.gz')
     test_all = sorted(test_unsorted, key=lambda filepath: filepath.name.lower())
-    if len(test_all) != len(gt_all):
-        raise ValueError('Found {} test images but {} ground-truth images'.format(len(test_all), len(gt_all)))
+    gt_all = match_ground_truth_files(test_all, gt_all)
 
     # Load training params
     json_path = os.path.join(args.model_dir, args.exp, 'training_params.json')

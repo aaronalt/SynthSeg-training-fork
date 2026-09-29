@@ -352,7 +352,7 @@ if __name__ == '__main__':
 
     validation_main_dir = os.path.join(args.model_dir, 'validation')
 
-    validate_training(test_all,
+    validate = validate_training(test_all,
                       gt_all,
                       args.model_dir,
                       validation_main_dir,
@@ -373,6 +373,11 @@ if __name__ == '__main__':
                       feat_multiplier=params.get('feat_multiplier', 2),
                       activation=params.get('activation', 'elu'),
                       recompute=False)
+    if validate:
+        print("Validation completed. Results saved in:", validation_main_dir)
+    else:
+        print("Validation failed. Please check the input parameters and directories.")
+        
 '''
     list_validation_dirs = [v for v in validation_main_dir]
     plot_validation_curves(list_validation_dirs, architecture_names=None, eval_indices=None,

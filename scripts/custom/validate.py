@@ -99,6 +99,9 @@ def validate_training(image_dir,
 
     # loop over models
     list_models = utils.list_files(models_dir, expr=['.h5'], cond_type='and')[::step_eval]
+    print('Found {} model checkpoint(s) in {}'.format(len(list_models), models_dir))
+    if not list_models:
+        raise FileNotFoundError('No .h5 model checkpoints found in {}'.format(models_dir))
     # list_models = [p for p in list_models if int(os.path.basename(p)[-6:-3]) % 10 == 0]
     loop_info = utils.LoopInfo(len(list_models), 1, 'validating', True)
     for model_idx, path_model in enumerate(list_models):
@@ -133,6 +136,8 @@ def validate_training(image_dir,
                     evaluation_labels=evaluation_labels,
                     recompute=recompute,
                     verbose=True)
+                else:
+                    print('Skipping {} because {} already exists'.format(os.path.basename(path_model), dice_path))
 
 
 def plot_validation_curves(list_validation_dirs, architecture_names=None, eval_indices=None,
@@ -350,16 +355,17 @@ if __name__ == '__main__':
     seg_labels = np.array(params['segmentation_labels'])
     topo_classes = np.array(params['generation_classes'])
 
-    validation_main_dir = os.path.join(args.model_dir, 'validation')
+    experiment_dir = os.path.join(args.model_dir, args.exp)
+    validation_main_dir = os.path.join(experiment_dir, 'validation')
 
-    validate = validate_training(test_all,
+    validate_training(test_all,
                       gt_all,
-                      args.model_dir,
+                      experiment_dir,
                       validation_main_dir,
                       seg_labels,
                       n_neutral_labels=params.get('n_neutral_labels'),
                       evaluation_labels=[138, 139],
-                      cropping=params.get('cropping'),
+                      cropping=params.get('cropping', None),
                       target_res=params.get('target_res', 1.),
                       gradients=False,
                       flip=params.get('flipping', False),
@@ -373,11 +379,8 @@ if __name__ == '__main__':
                       feat_multiplier=params.get('feat_multiplier', 2),
                       activation=params.get('activation', 'elu'),
                       recompute=False)
-    if validate:
-        print("Validation completed. Results saved in:", validation_main_dir)
-    else:
-        print("Validation failed. Please check the input parameters and directories.")
-        
+    print("Validation completed. Results saved in:", validation_main_dir)
+
 '''
     list_validation_dirs = [v for v in validation_main_dir]
     plot_validation_curves(list_validation_dirs, architecture_names=None, eval_indices=None,

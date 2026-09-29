@@ -10,7 +10,7 @@ import keras
 import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
-from SynthSeg.evaluate import evaluation, match_ground_truth_files
+from SynthSeg.evaluate import evaluation
 import numpy as np
 from glob import glob
 import json
@@ -96,6 +96,36 @@ def find_ground_truth(subject_id, hemisphere, modality=None):
                             return m
                 return matches[0]
     return None
+
+
+def match_ground_truth_files(path_segmentations, ground_truth_dirs):
+    """Match prediction files with ground-truth files by subject/hemisphere."""
+    matches = []
+    for prediction in sorted(Path(path_segmentations).glob('*.nii.gz')):
+        name = prediction.name
+        match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
+        if not match:
+            continue
+        subject_id, hemisphere = match.groups()
+        gt = None
+        patterns = [
+            f'*{subject_id}*{hemisphere}*.nii.gz',
+            f'*{subject_id}*_{hemisphere}_*.nii.gz',
+            f'sub-{subject_id}*{hemisphere}*.nii.gz',
+        ]
+        for directory in ground_truth_dirs:
+            if not directory.exists():
+                continue
+            for pattern in patterns:
+                candidates = sorted(directory.glob(pattern))
+                if candidates:
+                    gt = candidates[0]
+                    break
+            if gt is not None:
+                break
+        if gt is not None:
+            matches.append((str(prediction), str(gt)))
+    return matches
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')
 def get_epoch(f):

@@ -229,6 +229,12 @@ def evaluation(gt_dir,
     """This function computes Dice scores, as well as surface distances, between two sets of labels maps in gt_dir
     (ground truth) and seg_dir (typically predictions). Label maps in both folders are matched by sorting order.
     The resulting scores are saved at the specified locations.
+            if gt_labels.shape != seg.shape:
+                print('\nShape mismatch at evaluation index {}'.format(idx))
+                print('Ground truth: {}'.format(path_gt))
+                print('Prediction:   {}'.format(path_seg))
+                print('Ground-truth shape: {}'.format(gt_labels.shape))
+                print('Prediction shape:   {}'.format(seg.shape))
     :param gt_dir: path of directory with gt label maps
             if gt_labels.shape != seg.shape:
                 raise ValueError('Shape mismatch for ground truth {} and prediction {}: {} vs {}'.format(

@@ -230,6 +230,9 @@ def evaluation(gt_dir,
     (ground truth) and seg_dir (typically predictions). Label maps in both folders are matched by sorting order.
     The resulting scores are saved at the specified locations.
     :param gt_dir: path of directory with gt label maps
+            if gt_labels.shape != seg.shape:
+                raise ValueError('Shape mismatch for ground truth {} and prediction {}: {} vs {}'.format(
+                    path_gt, path_seg, gt_labels.shape, seg.shape))
     :param seg_dir: path of directory with label maps to compare to gt_dir. Matched to gt label maps by sorting order.
     :param label_list: list of label values for which to compute evaluation metrics. Can be a sequence, a 1d numpy
     array, or the path to such array.

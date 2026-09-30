@@ -228,6 +228,8 @@ def predict(path_images,
         if evaluation_labels is None:
             evaluation_labels = labels_segmentation
 
+        print(f"\nEvaluating segmentations in {eval_folder} against ground truth in {gt_folder}...")
+        
         # set path of result arrays for surface distance if necessary
         if compute_distances:
             path_hausdorff = os.path.join(eval_folder, 'hausdorff.npy')

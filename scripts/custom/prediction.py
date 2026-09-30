@@ -215,7 +215,8 @@ for path_model in model_files:
     print(f'path_images: {path_images}')
     print(f'path_segm: {path_segm}')
 
-    # gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
+    gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
+    
     # gt_all = [gt_path for _, gt_path in gt_matches]
     path_gt = '/home/althause/data/claustrum_gt/3T'
 

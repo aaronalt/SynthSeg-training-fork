@@ -182,6 +182,7 @@ for path_model in model_files:
 
     # Model and labels
     path_segmentation_labels = np.array(trained_model_params.get('segmentation_labels'))
+    print(f"Segmentation labels: {path_segmentation_labels}")
     path_topology_classes = np.array(trained_model_params.get('generation_classes'))
 
     # Create output directories

@@ -11,7 +11,7 @@ import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
 from SynthSeg.evaluate import evaluation
-from SynthSeg.validation import validate_training
+from SynthSeg.validate import validate_training
 import numpy as np
 from glob import glob
 import json

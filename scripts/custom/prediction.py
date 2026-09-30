@@ -257,7 +257,7 @@ for path_model in model_files:
         print(f'No .npy files found under {path_segm}')
 
     # Run prediction
-    '''
+    
     predict(path_images,
             path_segm,
             path_model,
@@ -283,7 +283,7 @@ for path_model in model_files:
             recompute=False)
 
     print("\nPrediction complete!")
-    '''
+    
     '''
     #############
     ## Validation

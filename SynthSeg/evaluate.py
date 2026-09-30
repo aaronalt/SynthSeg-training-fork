@@ -321,6 +321,26 @@ def evaluation(gt_dir,
             gt_labels = utils.load_volume(path_gt, dtype='int', aff_ref=np.eye(4))
             seg = utils.load_volume(path_seg, dtype='int', aff_ref=np.eye(4))
 
+            # ==================== GT LABEL REMAPPING FIX ====================
+            # If GT contains generic label '1', remap it to 138 (LH) or 139 (RH)
+            if 1 in gt_labels:
+                filename = os.path.basename(path_gt).lower()
+                
+                # Option A: Infer hemisphere from filename
+                if 'lh' in filename or 'left' in filename:
+                    gt_labels[gt_labels == 1] = 138
+                elif 'rh' in filename or 'right' in filename:
+                    gt_labels[gt_labels == 1] = 139
+                else:
+                    # Option B: Fallback - infer hemisphere from predicted labels in 'seg'
+                    unique_seg = np.unique(seg)
+                    if 138 in unique_seg and 139 not in unique_seg:
+                        gt_labels[gt_labels == 1] = 138
+                    elif 139 in unique_seg and 138 not in unique_seg:
+                        gt_labels[gt_labels == 1] = 139
+                    else:
+                        print(f"[WARNING] Could not determine hemisphere for {path_gt}. GT contains label 1.")
+
             # --- DEBUG 3: Raw Label Values Present ---
             gt_unique = np.unique(gt_labels)
             seg_unique = np.unique(seg)

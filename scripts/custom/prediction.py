@@ -279,6 +279,7 @@ for path_model in model_files:
             feat_multiplier=feat_multiplier,
             activation=activation,
             gt_folder=path_gt,
+            evaluation_labels=[138,139],  # claustrum labels
             compute_distances=True,
             recompute=True)
 

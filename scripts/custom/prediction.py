@@ -280,7 +280,7 @@ for path_model in model_files:
             activation=activation,
             gt_folder=path_gt,
             compute_distances=True,
-            recompute=False)
+            recompute=True)
 
     print("\nPrediction complete!")
     

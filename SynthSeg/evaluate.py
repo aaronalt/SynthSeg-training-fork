@@ -290,6 +290,10 @@ def evaluation(gt_dir,
         n_labels = len(label_list)
         max_label = np.max(label_list) + 1
 
+        # --- DEBUG 1: Expected Target Labels ---
+        print(f"\n[DEBUG 1] Total Target Labels ({n_labels}): {label_list}")
+        print(f"[DEBUG 1] Total files to evaluate: {len(path_segs)}")
+
         # initialise result matrices
         if compute_score_whole_structure:
             max_dists = np.zeros((n_labels + 1, len(path_segs), 3))
@@ -306,9 +310,23 @@ def evaluation(gt_dir,
             if verbose:
                 loop_info.update(idx)
 
+            # --- DEBUG 2: Matched Files ---
+            print(f"\n==========================================")
+            print(f"[DEBUG 2] Index {idx}")
+            print(f"  GT File:  {os.path.basename(path_gt)}")
+            print(f"  SEG File: {os.path.basename(path_seg)}")
+            print(f"==========================================")
+
             # load gt labels and segmentation
             gt_labels = utils.load_volume(path_gt, dtype='int', aff_ref=np.eye(4))
             seg = utils.load_volume(path_seg, dtype='int', aff_ref=np.eye(4))
+
+            # --- DEBUG 3: Raw Label Values Present ---
+            gt_unique = np.unique(gt_labels)
+            seg_unique = np.unique(seg)
+            print(f"[DEBUG 3] Unique values in GT array:  {gt_unique}")
+            print(f"[DEBUG 3] Unique values in SEG array: {seg_unique}")
+
             if path_mask is not None:
                 mask = utils.load_volume(path_mask, dtype='bool', aff_ref=np.eye(4))
                 gt_labels[mask] = max_label
@@ -351,6 +369,23 @@ def evaluation(gt_dir,
 
                 # compute max/mean surface distances for all labels
                 for index, label in enumerate(label_list):
+
+                    # --- DEBUG 4: Label Match Status ---
+                    in_gt = label in unique_gt_labels
+                    in_seg = label in unique_seg_labels
+                    
+                    if in_gt and in_seg:
+                        print(f"  [DEBUG 4] Label {label:2d}: PRESENT in both GT and SEG -> Calculating surface distance...")
+                        mask_gt = np.where(gt_labels == label, True, False)
+                        mask_seg = np.where(seg == label, True, False)
+                        tmp_max_dists, mean_dists[index, idx] = surface_distances(mask_gt, mask_seg, [100, 99, 95])
+                        max_dists[index, idx, :] = np.array(tmp_max_dists)
+                    else:
+                        print(f"  [DEBUG 4] Label {label:2d}: MISSING (In GT: {in_gt}, In SEG: {in_seg}) -> Applying max penalty: {max(gt_labels.shape)}")
+                        mean_dists[index, idx] = max(gt_labels.shape)
+                        max_dists[index, idx, :] = np.array([max(gt_labels.shape)] * 3)
+                    # --- DEBUG 4: Label Match Status ---
+                    
                     if (label in unique_gt_labels) & (label in unique_seg_labels):
                         mask_gt = np.where(gt_labels == label, True, False)
                         mask_seg = np.where(seg == label, True, False)

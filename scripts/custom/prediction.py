@@ -216,6 +216,7 @@ for path_model in model_files:
     print(f'path_segm: {path_segm}')
 
     # Run prediction
+    '''
     predict(path_images,
             path_segm,
             path_model,
@@ -238,13 +239,14 @@ for path_model in model_files:
             activation=activation)
 
     print("\nPrediction complete!")
-
+    '''
 
     ##############
     ## Evaluation
     ##############
 
-    gt_all = match_ground_truth_files(path_segm, active_gt_dirs)
+    gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
+    gt_all = [gt_path for _, gt_path in gt_matches]
 
     evaluation(
         gt_all, 

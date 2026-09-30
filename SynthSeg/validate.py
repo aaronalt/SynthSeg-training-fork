@@ -248,7 +248,8 @@ def plot_validation_curves(list_validation_dirs, architecture_names=None, eval_i
     if plot_legend:
         plt.legend(fontsize=fontsize)
     plt.tight_layout(pad=1)
-    plt.show()
+    # plt.show()
+    plt.savefig(os.path.join(list_validation_dirs[0], 'validation_curves.png'), dpi=300)
 
 
 def draw_learning_curve(path_tensorboard_files, architecture_names, figsize=(11, 6), fontsize=18,

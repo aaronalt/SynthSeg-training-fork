@@ -11,7 +11,7 @@ import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
 from SynthSeg.evaluate import evaluation
-from SynthSeg.validate import validate_training
+from SynthSeg.validate import validate_training, plot_validation_curves, draw_learning_curve
 import numpy as np
 from glob import glob
 import json
@@ -249,7 +249,7 @@ for path_model in model_files:
 
     print("\nPrediction complete!")
     '''
-
+    '''
     #############
     ## Validation
     #############
@@ -275,205 +275,11 @@ for path_model in model_files:
         activation=activation,
         recompute=False
     )
-
-
     '''
+val_dirs = [d for d in Path('/home/althause/data/seg/experiment_20260923_093722_only_quality_labels_clau10x').glob('dice_finetune_*') if d.is_dir()]
+plot_validation_curves(val_dirs)
 
-    # === TTA UNCERTAINTY ESTIMATION (claustrum-focused) ===
-      # Extract all .nii.gz files across all folders in gt_dirs
-    image_files = []
-    
-    for group, path_list in gt_dirs.items():
-        for p in path_list:
-            if p.is_dir():
-                # Gather all .nii.gz files from folders (T1_CONTROL, T1_VCFS, T2, etc.)
-                image_files.extend([str(f) for f in p.glob('*.nii.gz')])
-            elif p.is_file() and p.name.endswith('.nii.gz'):
-                # Handle standalone file entries (like case16)
-                image_files.append(str(p))
-    
-    # Sort and deduplicate
-    image_files = sorted(list(set(image_files)))
-    
-    print(f"Total images found for TTA: {len(image_files)}")
-    for img in image_files:
-        print(f"  - {img}")
-    tta_results_list = []
-    if ENABLE_TTA_UNCERTAINTY:
-        print(f"\n--- Running TTA uncertainty estimation ({N_TTA_AUGMENTATIONS} augmentations) ---")
-        tta_output_dir = os.path.join(path_segm, 'tta_uncertainty')
-        tta_results_list = predict_with_tta(
-            path_images=path_images,
-            path_model=path_model,
-            labels_segmentation=path_segmentation_labels,
-            output_dir=tta_output_dir,
-            n_neutral_labels=n_neutral_labels,
-            n_augmentations=N_TTA_AUGMENTATIONS,
-            n_levels=n_levels,
-            nb_conv_per_level=nb_conv_per_level,
-            conv_size=conv_size,
-            unet_feat_count=unet_feat_count,
-            feat_multiplier=feat_multiplier,
-            activation=activation,
-            target_res=target_res,
-            cropping=cropping,
-            sigma_smoothing=sigma_smoothing,
-            topology_classes=path_topology_classes,
-            keep_biggest_component=keep_biggest_component,
-            noise_std=trained_model_params.get('noise_std', 100),
-            bias_field_std=trained_model_params.get('bias_field_std', 0.3),
-            bias_scale=trained_model_params.get('bias_scale', 0.025),
-            tta_strength=TTA_STRENGTH,
-            uncertainty_type=TTA_UNCERTAINTY_TYPE,
-            quality_model_weights=TTA_QUALITY_MODEL_WEIGHTS,
-        )
-        # Clear GPU memory after TTA
-        keras.backend.clear_session()
-        tf.keras.backend.clear_session()
-        print("TTA uncertainty estimation complete.")
-
-    # Build TTA lookup by basename for merging with Dice results
-    tta_lookup = {}
-    for tta_r in tta_results_list:
-        tta_lookup[tta_r['basename']] = tta_r
-
-# === DICE EVALUATION ===
-    path_subj = Path(path_segm)
-    for sub in sorted(path_subj.glob('*.nii.gz')):
-        # Skip evaluating TTA consensus segmentations if they are in this folder
-        if 'tta_seg' in sub.name:
-            continue
-
-        name = sub.stem.replace('.nii', '')
-        match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
-
-        if not match:
-            continue
-
-        subject_id = match.group(1)
-        hemisphere = match.group(2).lower()
-
-        # Detect modality from filename
-        modality = None
-        if 't2w-cor' in name.lower() or 't2w_cor' in name.lower():
-            modality = 't2w-cor'
-        elif 't2w-tra' in name.lower() or 't2w_tra' in name.lower():
-            modality = 't2w-tra'
-        elif 't1w' in name.lower():
-            modality = 't1w'
-
-        gt = find_ground_truth(subject_id, hemisphere, modality)
-        group = field_strength
-
-        if gt:
-            print(f"\nFound {group} GT match for {subject_id} {hemisphere}: {gt.name}")
-
-            # 1. Standard Single-Pass Evaluation
-            results = evaluate.evaluate(
-                sub,
-                gt,
-                subject_id=subject_id,
-                hemi=hemisphere,
-                save_resampled=False,
-                save_output=True,
-                output_dir=path_subj,
-                group=group,
-                model=path_model,
-                prediction_path=path_segm
-            )
-
-# 2. TTA Consensus Evaluation against GT
-            basename = sub.name.replace('.nii.gz', '')
-
-            # Strict lookup: MUST match BOTH subject_id AND hemisphere (lh/rh)
-            tta_r = None
-            for k, v in tta_lookup.items():
-                if subject_id in k and hemisphere in k.lower():
-                    tta_r = v
-                    break
-
-            if tta_r and 'seg_path' in tta_r and os.path.exists(tta_r['seg_path']):
-                target_label = 138 if hemisphere == 'lh' else 139
-                tta_full_path = tta_r['seg_path']
-                tta_hemi_path = tta_full_path.replace('_tta_seg.nii.gz', f'_{hemisphere}_eval_tmp.nii.gz')
-
-                import nibabel as nib
-                img = nib.load(tta_full_path)
-                data = img.get_fdata()
-
-                # Extract target hemisphere label (138 for lh, 139 for rh)
-                hemi_data = np.where(data == target_label, target_label, 0).astype(np.int32)
-                
-                # Fallback: if single-hemisphere crop stored output under non-zero voxels regardless of ID
-                if np.sum(hemi_data > 0) == 0:
-                    hemi_data = np.where(data > 0, target_label, 0).astype(np.int32)
-
-                # Save temporary single-hemisphere volume for evaluate()
-                nib.save(nib.Nifti1Image(hemi_data, img.affine, img.header), tta_hemi_path)
-
-                # Run evaluation
-                tta_gt_results = evaluate.evaluate(
-                    tta_hemi_path,
-                    gt,
-                    subject_id=subject_id,
-                    hemi=hemisphere,
-                    save_resampled=False,
-                    save_output=False,
-                    group=group,
-                    model=path_model,
-                    prediction_path=os.path.dirname(tta_hemi_path)
-                )
-
-                # Clean up temporary file
-                if os.path.exists(tta_hemi_path):
-                    os.remove(tta_hemi_path)
-
-                if tta_gt_results and results:
-                    results['tta_gt_dice'] = tta_gt_results.get('dice')
-                    results['tta_gt_precision'] = tta_gt_results.get('precision')
-                    results['tta_gt_recall'] = tta_gt_results.get('recall')
-                    results['tta_gt_iou'] = tta_gt_results.get('iou')
-
-                    print(f"  Single-Pass Dice: {results.get('dice', 0):.4f} | "
-                          f"TTA Ensembled Dice: {results['tta_gt_dice']:.4f}")
-            else:
-                print(f"  [TTA Notice]: Could not match TTA file for subject '{subject_id}' hemi '{hemisphere}'")
-            
-    # Print per-epoch summary after each model completes
-    model_results = [r for r in all_model_results if r.get('model') == model]
-    if model_results and 'dice' in model_results[0]:
-        mean_dice = np.mean([r['dice'] for r in model_results])
-        mean_prec = np.mean([r['precision'] for r in model_results]) if 'precision' in model_results[0] else None
-        mean_rec  = np.mean([r['recall']    for r in model_results]) if 'recall'    in model_results[0] else None
-        mean_iou  = np.mean([r['iou']       for r in model_results]) if 'iou'       in model_results[0] else None
-        model_dice_scores[path_model] = mean_dice
-
-        epoch_num = get_epoch(path_model)
-        parts = [f"Epoch {epoch_num:>4} | Dice={mean_dice:.4f}"]
-        if mean_prec  is not None: parts.append(f"Prec={mean_prec:.4f}")
-        if mean_rec   is not None: parts.append(f"Recall={mean_rec:.4f}")
-        if mean_iou   is not None: parts.append(f"IoU={mean_iou:.4f}")
-        print("  " + "  |  ".join(parts))
-
-    # Clean up temporary outputs (delete nifti/posteriors/resampled, keep CSVs + TTA)
-    if DELETE_TMP_PREDICTIONS:
-        # Delete nifti files (but not TTA subdirectory)
-        for f in glob(os.path.join(path_segm, '*.nii.gz')):
-            os.remove(f)
-        # Delete posteriors and resampled directories
-        if os.path.exists(path_posteriors):
-            shutil.rmtree(path_posteriors)
-        if os.path.exists(path_resampled):
-            shutil.rmtree(path_resampled)
-        print(f"Cleaned up segmentations (kept CSVs + TTA uncertainty): {path_segm}")
-
-    # Clear GPU memory between models
-    keras.backend.clear_session()
-    tf.keras.backend.clear_session()
-    print(f"\n{'='*50}")
-    print(f"Completed evaluation for {model}")
-    print(f"{'='*50}\n")
-
+'''
 # Summary across all epochs
 if all_model_results:
     df = pd.DataFrame(all_model_results)

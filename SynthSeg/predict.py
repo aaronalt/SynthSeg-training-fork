@@ -306,9 +306,10 @@ def predict(path_images,
                 nib.save(gt_image, aligned_gt_path)
                 aligned_gt_paths.append(aligned_gt_path)
 
+            target_labels = [138, 139]
             evaluate.evaluation(aligned_gt_paths,
                                 aligned_seg_dir,
-                                evaluation_labels,
+                                label_list=target_labels,
                                 path_dice=os.path.join(eval_folder, 'dice.npy'),
                                 path_hausdorff=path_hausdorff,
                                 path_hausdorff_99=path_hausdorff_99,

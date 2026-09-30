@@ -215,8 +215,12 @@ for path_model in model_files:
     print(f'path_images: {path_images}')
     print(f'path_segm: {path_segm}')
 
+    # gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
+    # gt_all = [gt_path for _, gt_path in gt_matches]
+    path_gt = '/home/althause/data/claustrum_gt/3T'
+
     # Run prediction
-    '''
+    
     predict(path_images,
             path_segm,
             path_model,
@@ -236,20 +240,19 @@ for path_model in model_files:
             conv_size=conv_size,
             unet_feat_count=unet_feat_count,
             feat_multiplier=feat_multiplier,
-            activation=activation)
+            activation=activation,
+            gt_folder=path_gt,
+            compute_distances=True)
 
     print("\nPrediction complete!")
-    '''
+  
 
     ##############
     ## Evaluation
     ##############
 
-    gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
-    print(gt_matches)
-    gt_all = [gt_path for _, gt_path in gt_matches]
-    print(gt_all)
 
+    """
     evaluation(
         gt_all, 
         path_segm, 
@@ -257,6 +260,7 @@ for path_model in model_files:
         path_dice=path_segm,
         path_hausdorff=path_segm,
         path_mean_distance=path_segm)
+    """
 
     '''
 

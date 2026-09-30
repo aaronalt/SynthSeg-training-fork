@@ -19,7 +19,7 @@ import re
 import shutil
 import pandas as pd
 from pathlib import Path
-import compare_dice_batch as evaluate
+from compare_dice_batch import resample_to_target, evaluate
 from claustrum_uncertainty import predict_with_tta
 
 
@@ -246,7 +246,9 @@ for path_model in model_files:
     ##############
 
     gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
+    print(gt_matches)
     gt_all = [gt_path for _, gt_path in gt_matches]
+    print(gt_all)
 
     evaluation(
         gt_all, 

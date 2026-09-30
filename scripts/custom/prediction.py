@@ -206,6 +206,7 @@ for path_model in model_files:
     feat_multiplier = trained_model_params.get('feat_multiplier')
     n_channels = trained_model_params.get('n_channels')
 
+    '''
     print("\n=== Prediction Configuration ===")
     print(f"Input images: {path_images}")
     print(f"Output directory: {path_segm}")
@@ -215,9 +216,9 @@ for path_model in model_files:
     print("\nStarting prediction...\n")
     print(f'path_images: {path_images}')
     print(f'path_segm: {path_segm}')
+    '''
 
-    gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
-    
+    # gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
     # gt_all = [gt_path for _, gt_path in gt_matches]
     path_gt = '/home/althause/data/claustrum_gt/3T'
 
@@ -277,6 +278,8 @@ for path_model in model_files:
     )
     '''
 val_dirs = [d for d in Path('/home/althause/data/seg/experiment_20260923_093722_only_quality_labels_clau10x').glob('dice_finetune_*') if d.is_dir()]
+print(f"\nFound {len(val_dirs)} validation directories for plotting.")
+print(f"Validation directories: {[str(d) for d in val_dirs]}")
 plot_validation_curves(val_dirs)
 
 '''

@@ -17,11 +17,16 @@ License.
 # python imports
 import os
 import csv
+import re
+import tempfile
+from pathlib import Path
 import numpy as np
 import tensorflow as tf
 import keras.layers as KL
 import keras.backend as K
 from keras.models import Model
+import nibabel as nib
+from nibabel.processing import resample_from_to
 
 # project imports
 from SynthSeg import evaluate
@@ -31,6 +36,47 @@ from ext.lab2im import utils
 from ext.lab2im import layers
 from ext.lab2im import edit_volumes
 from ext.neuron import models as nrn_models
+
+
+def _collect_gt_paths(gt_folder):
+    """Collect ground-truth image paths, including nested GT directories."""
+    if isinstance(gt_folder, (list, tuple)):
+        paths = []
+        for path in gt_folder:
+            path = os.fspath(path)
+            if os.path.isdir(path):
+                paths.extend(str(p) for p in sorted(Path(path).rglob('*'))
+                             if p.is_file() and (p.suffix.lower() in ('.nii', '.mgz', '.npz')
+                                                 or p.name.lower().endswith('.nii.gz')))
+            else:
+                paths.append(path)
+        return sorted(paths, key=lambda path: (os.path.basename(path).lower(), path.lower()))
+
+    gt_folder = os.fspath(gt_folder)
+    if os.path.isdir(gt_folder):
+        return sorted((str(path) for path in Path(gt_folder).rglob('*')
+                       if path.is_file() and (path.suffix.lower() in ('.nii', '.mgz', '.npz')
+                                              or path.name.lower().endswith('.nii.gz'))),
+                      key=lambda path: (os.path.basename(path).lower(), path.lower()))
+    return [gt_folder]
+
+
+def _match_gt_paths(path_segmentations, gt_paths):
+    """Match segmentations and GT by subject/hemisphere, with sorting fallback."""
+    def subject_hemisphere(path):
+        match = re.search(r'(\d+).*?(lh|rh)', os.path.basename(path), re.IGNORECASE)
+        if match:
+            return str(int(match.group(1))), match.group(2).lower()
+        return None
+
+    parsed_gt = [(path, subject_hemisphere(path)) for path in gt_paths]
+    seg_keys = [subject_hemisphere(path) for path in path_segmentations]
+    if all(key is not None and any(gt_key == key for _, gt_key in parsed_gt) for key in seg_keys):
+        return [(path_seg, next(path for path, gt_key in parsed_gt if gt_key == key))
+                for path_seg, key in zip(path_segmentations, seg_keys)]
+    if len(path_segmentations) == len(gt_paths):
+        return list(zip(path_segmentations, gt_paths))
+    raise ValueError('Could not match all segmentations to ground-truth files.')
 
 
 def predict(path_images,
@@ -111,9 +157,9 @@ def predict(path_images,
     :param unet_feat_count: (optional) number of features for the first layer of the unet. Default is 24.
     :param feat_multiplier: (optional) multiplicative factor for the number of feature for each new level. Default is 2.
     :param activation: (optional) activation function. Can be 'elu', 'relu'.
-    :param gt_folder: (optional) path of the ground truth label maps corresponding to the input images. Should be a dir,
-    if path_images is a dir, or a file if path_images is a file.
-    Providing a gt_folder will trigger a Dice evaluation, where scores will be writen along with the path_segmentations.
+    :param gt_folder: (optional) path or list of ground-truth label maps corresponding to the input images. Directories
+    are searched recursively. Providing gt_folder triggers evaluation after predictions are resampled onto their
+    matched ground-truth grids.
     Specifically, the scores are contained in a numpy array, where labels are in rows, and subjects in columns.
     :param evaluation_labels: (optional) if gt_folder is True you can evaluate the Dice scores on a subset of the
     segmentation labels, by providing another label list here. Can be a sequence, a 1d numpy array, or the path to a
@@ -239,19 +285,39 @@ def predict(path_images,
         else:
             path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
 
-        # compute evaluation metrics
-        evaluate.evaluation(gt_folder,
-                            eval_folder,
-                            evaluation_labels,
-                            path_dice=os.path.join(eval_folder, 'dice.npy'),
-                            path_hausdorff=path_hausdorff,
-                            path_hausdorff_99=path_hausdorff_99,
-                            path_hausdorff_95=path_hausdorff_95,
-                            path_mean_distance=path_mean_distance,
-                            list_incorrect_labels=list_incorrect_labels,
-                            list_correct_labels=list_correct_labels,
-                            recompute=recompute,
-                            verbose=verbose)
+        gt_paths = _collect_gt_paths(gt_folder)
+        matched_paths = _match_gt_paths(path_segmentations, gt_paths)
+
+        # Resample each prediction onto its paired GT grid for voxelwise evaluation.
+        with tempfile.TemporaryDirectory(prefix='synthseg_evaluation_') as temp_dir:
+            aligned_seg_dir = os.path.join(temp_dir, 'segmentations')
+            os.makedirs(aligned_seg_dir)
+            aligned_gt_paths = []
+            for index, (path_seg, path_gt) in enumerate(matched_paths):
+                seg_image = nib.load(path_seg)
+                gt_image = nib.load(path_gt)
+                aligned_seg = resample_from_to(seg_image,
+                                               (gt_image.shape, gt_image.affine),
+                                               order=0)
+
+                aligned_seg_path = os.path.join(aligned_seg_dir, f'{index:06d}_seg.nii.gz')
+                aligned_gt_path = os.path.join(temp_dir, f'{index:06d}_gt.nii.gz')
+                nib.save(aligned_seg, aligned_seg_path)
+                nib.save(gt_image, aligned_gt_path)
+                aligned_gt_paths.append(aligned_gt_path)
+
+            evaluate.evaluation(aligned_gt_paths,
+                                aligned_seg_dir,
+                                evaluation_labels,
+                                path_dice=os.path.join(eval_folder, 'dice.npy'),
+                                path_hausdorff=path_hausdorff,
+                                path_hausdorff_99=path_hausdorff_99,
+                                path_hausdorff_95=path_hausdorff_95,
+                                path_mean_distance=path_mean_distance,
+                                list_incorrect_labels=list_incorrect_labels,
+                                list_correct_labels=list_correct_labels,
+                                recompute=recompute,
+                                verbose=verbose)
 
 
 def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, out_volumes, recompute):

@@ -11,6 +11,7 @@ import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
 from SynthSeg.evaluate import evaluation
+from SynthSeg.validation import validate_training
 import numpy as np
 from glob import glob
 import json
@@ -243,25 +244,38 @@ for path_model in model_files:
             feat_multiplier=feat_multiplier,
             activation=activation,
             gt_folder=path_gt,
-            compute_distances=True)
+            compute_distances=True,
+            recompute=False)
 
     print("\nPrediction complete!")
   
 
-    ##############
-    ## Evaluation
-    ##############
+    #############
+    ## Validation
+    #############
 
+    validate_training(
+        image_dir=path_images,
+        gt_dir=path_gt,
+        models_dir=model_dir,
+        validation_main_dir=model_dir,
+        labels_segmentation=path_segm,
+        n_neutral_labels=n_neutral_labels,
+        cropping=cropping,
+        target_res=target_res,
+        flip=flip,
+        topology_classes=path_topology_classes,
+        sigma_smoothing=sigma_smoothing,
+        keep_biggest_component=keep_biggest_component,
+        n_levels=n_levels,
+        nb_conv_per_level=nb_conv_per_level,
+        conv_size=conv_size,
+        unet_feat_count=unet_feat_count,
+        feat_multiplier=feat_multiplier,
+        activation=activation,
+        recompute=False
+    )
 
-    """
-    evaluation(
-        gt_all, 
-        path_segm, 
-        label_list=[138,139],
-        path_dice=path_segm,
-        path_hausdorff=path_segm,
-        path_mean_distance=path_segm)
-    """
 
     '''
 

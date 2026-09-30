@@ -280,7 +280,12 @@ for path_model in model_files:
 val_dirs = [d for d in Path('/home/althause/data/seg/experiment_20260923_093722_only_quality_labels_clau10x').glob('dice_finetune_*') if d.is_dir()]
 print(f"\nFound {len(val_dirs)} validation directories for plotting.")
 print(f"Validation directories: {[str(d) for d in val_dirs]}")
-plot_validation_curves(val_dirs)
+plot_val = plot_validation_curves(val_dirs)
+if plot_val:
+    print(f"\nValidation curves saved to: {plot_val}")
+else:
+    print("\nNo validation curves were generated.")
+
 
 '''
 # Summary across all epochs

@@ -150,7 +150,7 @@ for path_model in model_files:
     # Determine field strength (manual override or auto-detect)
     if FORCE_FIELD_STRENGTH:
         field_strength = FORCE_FIELD_STRENGTH
-        print(f"MANUAL override: Using {field_strength} ground truth")
+        # print(f"MANUAL override: Using {field_strength} ground truth")
     else:
         # Auto-detect from TEST folder path or filenames
         field_strength = '3T'  # default
@@ -161,15 +161,15 @@ for path_model in model_files:
             test_files = glob(os.path.join(path_images, '*'))
             if any('7T' in str(f) or '7t' in str(f).lower() for f in test_files):
                 field_strength = '7T'
-        print(f"Auto-detected field strength: {field_strength}")
+        # print(f"Auto-detected field strength: {field_strength}")
 
     # Set active GT directories based on field strength
     if field_strength == 'both':
         active_gt_dirs = gt_dirs['3T'] + gt_dirs['7T']
-        print(f"Using GT directories (3T + 7T): {[str(d) for d in active_gt_dirs]}")
+        # print(f"Using GT directories (3T + 7T): {[str(d) for d in active_gt_dirs]}")
     else:
         active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
-        print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
+        #print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
     path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
@@ -277,7 +277,7 @@ for path_model in model_files:
         recompute=False
     )
     '''
-val_dirs = [d for d in Path('/home/althause/data/seg/experiment_20260923_093722_only_quality_labels_clau10x').glob('dice_finetune_*') if d.is_dir()]
+val_dirs = [d for d in Path(model_dir).glob('dice_finetune_*') if d.is_dir()]
 print(f"\nFound {len(val_dirs)} validation directories for plotting.")
 print(f"Validation directories: {[str(d) for d in val_dirs]}")
 plot_val = plot_validation_curves(val_dirs)

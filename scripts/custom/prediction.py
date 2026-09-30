@@ -222,6 +222,24 @@ for path_model in model_files:
     # gt_all = [gt_path for _, gt_path in gt_matches]
     path_gt = '/home/althause/data/claustrum_gt/3T'
 
+    # Collect all arrays for this model into a single CSV, one row per array element.
+    npy_files = sorted(Path(path_segm).rglob('*.npy'))
+    if npy_files:
+        rows = []
+        for npy_file in npy_files:
+            array = np.load(npy_file, allow_pickle=False)
+            for index, value in enumerate(array.reshape(-1)):
+                rows.append({
+                    'file': str(npy_file.relative_to(path_segm)),
+                    'index': index,
+                    'value': value.item() if isinstance(value, np.generic) else value,
+                })
+        csv_path = os.path.join(path_segm, 'metrics.csv')
+        pd.DataFrame(rows).to_csv(csv_path, index=False)
+        print(f'Combined {len(npy_files)} .npy files into {csv_path}')
+    else:
+        print(f'No .npy files found under {path_segm}')
+
     # Run prediction
     '''
     predict(path_images,

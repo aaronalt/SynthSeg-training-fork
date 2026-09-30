@@ -259,7 +259,7 @@ for path_model in model_files:
         gt_dir=path_gt,
         models_dir=model_dir,
         validation_main_dir=model_dir,
-        labels_segmentation=path_segm,
+        labels_segmentation=path_segmentation_labels,
         n_neutral_labels=n_neutral_labels,
         cropping=cropping,
         target_res=target_res,

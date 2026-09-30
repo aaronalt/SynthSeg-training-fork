@@ -222,7 +222,7 @@ for path_model in model_files:
     path_gt = '/home/althause/data/claustrum_gt/3T'
 
     # Run prediction
-    
+    '''
     predict(path_images,
             path_segm,
             path_model,
@@ -248,7 +248,7 @@ for path_model in model_files:
             recompute=False)
 
     print("\nPrediction complete!")
-  
+    '''
 
     #############
     ## Validation

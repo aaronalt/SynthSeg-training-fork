@@ -223,23 +223,38 @@ for path_model in model_files:
     # gt_all = [gt_path for _, gt_path in gt_matches]
     path_gt = '/home/althause/data/claustrum_gt/3T'
 
-    # Collect all arrays for this model into a single CSV, one row per array element.
-    npy_files = sorted(Path(path_segm).rglob('*.npy'))
-    if npy_files:
-        rows = []
-        for npy_file in npy_files:
-            array = np.load(npy_file, allow_pickle=False)
-            for index, value in enumerate(array.reshape(-1)):
-                rows.append({
-                    'file': str(npy_file.relative_to(path_segm)),
-                    'index': index,
-                    'value': value.item() if isinstance(value, np.generic) else value,
-                })
-        csv_path = os.path.join(path_segm, 'metrics.csv')
-        pd.DataFrame(rows).to_csv(csv_path, index=False)
-        print(f'Combined {len(npy_files)} .npy files into {csv_path}')
-    else:
-        print(f'No .npy files found under {path_segm}')
+npy_files = sorted(Path(path_segm).rglob('*.npy'))
+if npy_files:
+    dfs = []
+    for npy_file in npy_files:
+        array = np.load(npy_file, allow_pickle=False)
+        rel_path = str(npy_file.relative_to(path_segm))
+
+        if array.ndim == 2:
+            rows, cols = array.shape
+            # Create a column per class/feature (class_0, class_1, ...)
+            df = pd.DataFrame(
+                array, columns=[f'class_{i}' for i in range(cols)]
+            )
+            df.insert(0, 'row_idx', np.arange(rows))
+            df.insert(0, 'file', rel_path)
+        else:
+            # Fallback for 1D or 3D arrays
+            df = pd.DataFrame(
+                {
+                    'file': rel_path,
+                    'index': np.arange(array.size),
+                    'value': array.ravel(),
+                }
+            )
+
+        dfs.append(df)
+
+    csv_path = os.path.join(path_segm, 'metrics.csv')
+    pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)
+    print(f'Combined {len(npy_files)} .npy files into {csv_path}')
+else:
+    print(f'No .npy files found under {path_segm}')
 
     # Run prediction
     '''

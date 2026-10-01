@@ -164,3 +164,80 @@ def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
         print(f'Could not write plot: {e}')
 
     return df
+
+
+def _read_tb_scalars(event_files, tags=('epoch_loss', 'loss')):
+    """Read (step, value) scalar series from TF event files, handling both TF1
+    (simple_value) and TF2/Keras3 (tensor field) encodings.
+    Returns {tag: [(step, value), ...]}."""
+    from tensorflow.python.framework.tensor_util import make_ndarray
+    from tensorflow.compat.v1.train import summary_iterator
+
+    series = {}
+    for event_file in sorted(map(str, event_files)):
+        for event in summary_iterator(event_file):
+            for v in event.summary.value:
+                if v.tag not in tags:
+                    continue
+                kind = v.WhichOneof('kind')
+                if kind == 'simple_value':
+                    value = v.simple_value
+                elif kind == 'tensor':
+                    value = float(make_ndarray(v.tensor))
+                else:
+                    continue
+                series.setdefault(v.tag, []).append((event.step, value))
+    return series
+
+
+def plot_loss_curves(models_dir, out_dir=None):
+    """Plot training and validation loss vs epoch from TensorBoard event files under
+    models_dir (e.g. model_dir/logs/train and .../logs/validation as written by the Keras
+    TensorBoard callback), in the same style as epoch_metrics.png.
+    Saves loss_curves.png into out_dir (default: models_dir) and prints the final losses.
+    :param models_dir: directory searched recursively for events.out.tfevents.* files.
+    :param out_dir: where to write loss_curves.png.
+    """
+    models_dir = Path(models_dir)
+    event_files = sorted(models_dir.rglob('events.out.tfevents.*'))
+    if not event_files:
+        print(f'No TensorBoard event files found under {models_dir}')
+        return
+
+    groups = {}
+    for f in event_files:
+        groups.setdefault(f.parent.name, []).append(f)  # e.g. 'train', 'validation'
+
+    try:
+        curves = {}
+        for name, files in groups.items():
+            series = _read_tb_scalars(files)
+            tag = 'epoch_loss' if 'epoch_loss' in series else ('loss' if 'loss' in series else None)
+            if tag:
+                pts = sorted(series[tag])
+                curves[name] = (np.array([s for s, _ in pts]), np.array([v for _, v in pts]))
+        if not curves:
+            print(f'No loss scalars found in event files under {models_dir}')
+            return
+    except ImportError:
+        print('tensorflow is required to read event files; skipping loss curves.')
+        return
+
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(5, 4))
+    for name, (steps, values) in sorted(curves.items()):
+        ax.plot(steps, values, marker='o', markersize=3, label=name)
+        print(f'{name}: {len(values)} epochs, final loss {values[-1]:.4f}, '
+              f'min {values.min():.4f} (epoch {int(steps[values.argmin()])})')
+    ax.set_title('loss')
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('loss')
+    ax.legend()
+    fig.tight_layout()
+    out_path = Path(out_dir) if out_dir else models_dir
+    out_path = out_path / 'loss_curves.png'
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f'Wrote loss curves to {out_path}')

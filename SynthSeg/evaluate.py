@@ -321,6 +321,11 @@ def evaluation(gt_dir,
             gt_labels = utils.load_volume(path_gt, dtype='int', aff_ref=np.eye(4))
             seg = utils.load_volume(path_seg, dtype='int', aff_ref=np.eye(4))
 
+            print(f"[EVAL CHECK] GT Path : {os.path.basename(path_gt)} (Voxels > 0: {np.count_nonzero(gt_labels)})")
+            print(f"[EVAL CHECK] SEG Path: {os.path.basename(path_seg)} (Voxels > 0: {np.count_nonzero(seg)})")
+            print(f"[EVAL CHECK] Shared Memory Buffer?: {gt_labels.ctypes.data == seg.ctypes.data}")
+            print(f"[EVAL CHECK] Identical Array Values?: {np.array_equal(gt_labels, seg)}")
+
             # ==================== GT LABEL REMAPPING FIX ====================
             # If GT contains generic label '1', remap it to 138 (LH) or 139 (RH)
             if 1 in gt_labels:

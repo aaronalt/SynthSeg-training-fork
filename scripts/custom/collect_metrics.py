@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from metrics_merge import merge_metrics_npy, print_metrics_summary
+from metrics_merge import merge_metrics_npy, summarize_per_epoch
 
 DEFAULT_SEG_ROOT = '/home/althause/data/seg'
 
@@ -44,5 +44,5 @@ if __name__ == '__main__':
             csv_path, _ = merge_metrics_npy(folder)
             n_written += csv_path is not None
         if folders:
-            print_metrics_summary(folders)
+            summarize_per_epoch(folders)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')

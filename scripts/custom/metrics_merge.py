@@ -73,53 +73,94 @@ def merge_metrics_npy(path_segm, eval_label_names=('138', '139')):
     return csv_path, tidy_path
 
 
-def print_metrics_summary(folders, eval_label_names=('138', '139')):
-    """Print mean +/- std of every metric, pooled across the given checkpoint folders
-    (e.g. all epochs of one experiment).
+def _epoch_of(folder):
+    """Epoch number parsed from a checkpoint folder name (first digit group, e.g.
+    dice_finetune_005_20 -> 5), else None."""
+    import re
+    digits = re.sub('[^0-9]', ' ', Path(folder).name).split()
+    return int(digits[0]) if digits else None
+
+
+def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
+    """Compute per-epoch mean +/- std of every metric across the given checkpoint folders,
+    print them, report the best epoch per metric, save epoch_metrics_summary.csv and
+    epoch_metrics.png (mean per epoch, both labels) into out_dir (default: common parent).
     Absent-label entries (dice == 0 for the hemisphere not present in a file) are excluded
     from every metric, so distance penalties for absent labels don't pollute the averages.
     :param folders: iterable of checkpoint seg folders containing the metric .npy files.
+    :param out_dir: where to write epoch_metrics_summary.csv / epoch_metrics.png.
     :param eval_label_names: row names matching the evaluation_labels used during evaluation.
+    :return: the summary DataFrame, or None if nothing was found.
     """
-    dice_stack = []
-    metric_stacks = {}
-    for folder in folders:
-        folder = Path(folder)
+    rows = []
+    for folder in sorted(map(Path, folders), key=lambda f: (_epoch_of(f) is None, _epoch_of(f))):
         dice_file = folder / 'dice.npy'
         if not dice_file.exists():
             continue
         dice = np.load(dice_file)
         if dice.ndim != 2:
             continue
-        dice_stack.append(dice)
+        present = dice != 0.0  # (n_labels, n_subjects) mask of present labels
+        arrays = {'dice': dice}
         for name in DISTANCE_METRICS:
             f = folder / f'{name}.npy'
             if f.exists():
                 arr = np.load(f)
                 if arr.shape == dice.shape:
-                    metric_stacks.setdefault(name, []).append(arr)
-    if not dice_stack:
-        print('No dice.npy files found to summarize.')
-        return
+                    arrays[name] = arr
+        for name, arr in arrays.items():
+            for row_idx in range(arr.shape[0]):
+                values = arr[row_idx][present[row_idx]]
+                if values.size:
+                    rows.append({'epoch': _epoch_of(folder), 'folder': folder.name,
+                                 'metric': name,
+                                 'label': eval_label_names[row_idx] if row_idx < len(eval_label_names) else str(row_idx),
+                                 'mean': np.mean(values), 'std': np.std(values), 'n': values.size})
+    if not rows:
+        print('No metric .npy files found to summarize.')
+        return None
 
-    dice_all = np.concatenate(dice_stack, axis=1)
-    present = dice_all != 0.0  # (n_labels, n_subjects) mask of present labels
-    arrays = {'dice': dice_all}
-    for name, stack in metric_stacks.items():
-        arrays[name] = np.concatenate(stack, axis=1)
+    df = pd.DataFrame(rows)
+    metrics_order = ['dice'] + [m for m in DISTANCE_METRICS if m in set(df.metric)]
 
-    n_epochs = len(dice_stack)
-    print(f'\nSummary over {n_epochs} epoch(s), {dice_all.shape[1]} pooled subject samples:')
-    print(f'{"metric":<15}{"label":<8}{"mean":>12}{"std":>12}{"n":>6}')
-    for name in ['dice'] + [m for m in DISTANCE_METRICS if m in arrays]:
-        arr = arrays[name]
-        for row_idx, label_name in enumerate(eval_label_names[:arr.shape[0]]):
-            values = arr[row_idx][present[row_idx]]
-            if values.size:
-                print(f'{name:<15}{label_name:<8}{np.mean(values):>12.4f}'
-                      f'{np.std(values):>12.4f}{values.size:>6}')
-        # pooled over both labels
-        pooled = np.concatenate([arr[r][present[r]] for r in range(arr.shape[0])])
-        if pooled.size:
-            print(f'{name:<15}{"all":<8}{np.mean(pooled):>12.4f}'
-                  f'{np.std(pooled):>12.4f}{pooled.size:>6}')
+    print('\nPer-epoch means (present labels only):')
+    for name in metrics_order:
+        sub = df[df.metric == name]
+        print(f'\n{name}:')
+        print(sub.pivot_table(index='epoch', columns='label', values='mean', aggfunc='first')
+              .to_string(float_format=lambda v: f'{v:.4f}'))
+
+    print('\nBest epoch per metric (by mean of both labels):')
+    for name in metrics_order:
+        sub = df[df.metric == name].groupby('epoch')['mean'].mean()
+        best = sub.idxmax() if name == 'dice' else sub.idxmin()
+        print(f'  {name:<15}epoch {best} ({sub[best]:.4f})')
+
+    if out_dir is None:
+        out_dir = os.path.commonpath([str(f) for f in folders])
+    out_dir = Path(out_dir)
+    csv_path = out_dir / 'epoch_metrics_summary.csv'
+    df.to_csv(csv_path, index=False)
+    print(f'\nWrote per-epoch summary to {csv_path}')
+
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(1, len(metrics_order), figsize=(5 * len(metrics_order), 4), squeeze=False)
+        for ax, name in zip(axes[0], metrics_order):
+            for label, sub in df[df.metric == name].groupby('label'):
+                sub = sub.sort_values('epoch')
+                ax.errorbar(sub.epoch, sub['mean'], yerr=sub['std'], marker='o', capsize=3, label=label)
+            ax.set_title(name)
+            ax.set_xlabel('epoch')
+            ax.legend()
+        fig.tight_layout()
+        png_path = out_dir / 'epoch_metrics.png'
+        fig.savefig(png_path, dpi=150)
+        plt.close(fig)
+        print(f'Wrote per-epoch plot to {png_path}')
+    except Exception as e:
+        print(f'Could not write plot: {e}')
+
+    return df

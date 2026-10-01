@@ -223,38 +223,9 @@ for path_model in model_files:
     # gt_all = [gt_path for _, gt_path in gt_matches]
     path_gt = '/home/althause/data/claustrum_gt/3T'
 
-    npy_files = sorted(Path(path_segm).rglob('*.npy'))
-    if npy_files:
-        dfs = []
-        for npy_file in npy_files:
-            array = np.load(npy_file, allow_pickle=False)
-            rel_path = str(npy_file.relative_to(path_segm))
-
-            if array.ndim == 2:
-                rows, cols = array.shape
-                # Create a column per class/feature (class_0, class_1, ...)
-                df = pd.DataFrame(
-                    array, columns=[f'class_{i}' for i in range(cols)]
-                )
-                df.insert(0, 'row_idx', np.arange(rows))
-                df.insert(0, 'file', rel_path)
-            else:
-                # Fallback for 1D or 3D arrays
-                df = pd.DataFrame(
-                    {
-                        'file': rel_path,
-                        'index': np.arange(array.size),
-                        'value': array.ravel(),
-                    }
-                )
-
-            dfs.append(df)
-
-        csv_path = os.path.join(path_segm, 'metrics.csv')
-        pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)
-        print(f'Combined {len(npy_files)} .npy files into {csv_path}')
-    else:
-        print(f'No .npy files found under {path_segm}')
+    # Delete stale evaluation arrays so old results cannot be re-merged below
+    for stale_npy in sorted(Path(path_segm).rglob('*.npy')):
+        stale_npy.unlink()
 
     # Run prediction
     
@@ -284,6 +255,45 @@ for path_model in model_files:
             recompute=True)
 
     print("\nPrediction complete!")
+
+    # Merge evaluation .npy files into metrics.csv
+    # Arrays are (n_labels, n_subjects): rows are evaluation labels, columns are matched subjects
+    eval_label_names = ['138', '139']  # matches evaluation_labels passed to predict()
+    npy_files = sorted(Path(path_segm).rglob('*.npy'))
+    if npy_files:
+        subject_names = [p.name.replace('.nii.gz', '') for p in sorted(Path(path_segm).glob('*.nii.gz'))]
+        dfs = []
+        for npy_file in npy_files:
+            array = np.load(npy_file, allow_pickle=False)
+            rel_path = str(npy_file.relative_to(path_segm))
+
+            if array.ndim == 2:
+                n_labels, n_subjects = array.shape
+                if len(subject_names) == n_subjects:
+                    columns = subject_names
+                else:
+                    columns = [f'subject_{i}' for i in range(n_subjects)]
+                # Create a row per label (138, 139)
+                df = pd.DataFrame(array, columns=columns)
+                df.insert(0, 'label', eval_label_names[:n_labels])
+                df.insert(0, 'file', rel_path)
+            else:
+                # Fallback for 1D or 3D arrays
+                df = pd.DataFrame(
+                    {
+                        'file': rel_path,
+                        'index': np.arange(array.size),
+                        'value': array.ravel(),
+                    }
+                )
+
+            dfs.append(df)
+
+        csv_path = os.path.join(path_segm, 'metrics.csv')
+        pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)
+        print(f'Combined {len(npy_files)} .npy files into {csv_path}')
+    else:
+        print(f'No .npy files found under {path_segm}')
     
     '''
     #############

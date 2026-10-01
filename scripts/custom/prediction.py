@@ -58,9 +58,9 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # Find all model checkpoints and sort by epoch number
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_203703' # /home/althause/data/logs/10000_steps_minus_bad_labels.log
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260922_111744' # /home/althause/data/logs/7t_validation.log
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260923_093722_only_quality_labels_clau10x' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-# model_files = model_files[19:21]
+model_files = model_files[19:21]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
@@ -257,13 +257,14 @@ for path_model in model_files:
 
     print("\nPrediction complete!")
 
-    # Merge evaluation .npy files into metrics.csv
+    # Merge evaluation .npy files into metrics.csv (wide) and metrics_tidy.csv (long)
     # Arrays are (n_labels, n_subjects): rows are evaluation labels, columns are matched subjects
     eval_label_names = ['138', '139']  # matches evaluation_labels passed to predict()
     npy_files = sorted(Path(path_segm).rglob('*.npy'))
     if npy_files:
         subject_names = [p.name.replace('.nii.gz', '') for p in sorted(Path(path_segm).glob('*.nii.gz'))]
         dfs = []
+        tidy_rows = []
         for npy_file in npy_files:
             array = np.load(npy_file, allow_pickle=False)
             rel_path = str(npy_file.relative_to(path_segm))
@@ -278,6 +279,11 @@ for path_model in model_files:
                 df = pd.DataFrame(array, columns=columns)
                 df.insert(0, 'label', eval_label_names[:n_labels])
                 df.insert(0, 'file', rel_path)
+                # Long format: one row per (metric, label, subject) value
+                for label_name, row in zip(eval_label_names[:n_labels], array):
+                    for subject, value in zip(columns, row):
+                        tidy_rows.append({'metric': Path(rel_path).stem, 'label': label_name,
+                                          'subject': subject, 'value': value})
             else:
                 # Fallback for 1D or 3D arrays
                 df = pd.DataFrame(
@@ -293,6 +299,10 @@ for path_model in model_files:
         csv_path = os.path.join(path_segm, 'metrics.csv')
         pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)
         print(f'Combined {len(npy_files)} .npy files into {csv_path}')
+        if tidy_rows:
+            tidy_path = os.path.join(path_segm, 'metrics_tidy.csv')
+            pd.DataFrame(tidy_rows).to_csv(tidy_path, index=False)
+            print(f'Wrote {len(tidy_rows)} rows (all metrics, long format) to {tidy_path}')
     else:
         print(f'No .npy files found under {path_segm}')
 
@@ -306,6 +316,13 @@ for path_model in model_files:
         # is masked too. plot_validation_curves averages with np.nanmean.
         dice_scores = np.load(path_dice).astype('float64')
         dice_scores[dice_scores == 0.0] = np.nan
+        n_masked = np.count_nonzero(np.isnan(dice_scores))
+        if n_masked == dice_scores.size:
+            print(f'[WARNING] dice.npy for {model_name} is all zeros: nothing left to plot after '
+                  f'masking. Check the evaluation debug output (GT label remapping / matching).')
+        else:
+            print(f'Masked {n_masked}/{dice_scores.size} absent-label dice scores for {model_name}; '
+                  f'epoch mean over present labels: {np.nanmean(dice_scores):.4f}')
         np.save(os.path.join(epoch_dir, 'dice.npy'), dice_scores)
     
     '''

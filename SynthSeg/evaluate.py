@@ -41,7 +41,13 @@ def fast_dice(x, y, labels):
 
         # build bins for histograms
         label_edges = np.sort(np.concatenate([labels_sorted - 0.1, labels_sorted + 0.1]))
-        label_edges = np.insert(label_edges, [0, len(label_edges)], [labels_sorted[0] - 0.1, labels_sorted[-1] + 0.1])
+        # the outer edges must span the full value range of both inputs: np.histogram2d silently drops
+        # any voxel pair where x or y falls outside [edges[0], edges[-1]], which would remove all
+        # label/background disagreements from the marginal sums when 'labels' is a subset of the
+        # values present (e.g. [138, 139] without background), inflating Dice towards 1
+        label_edges = np.insert(label_edges, [0, len(label_edges)],
+                                [min(labels_sorted[0] - 0.1, np.min(x), np.min(y)) - 0.1,
+                                 max(labels_sorted[-1] + 0.1, np.max(x), np.max(y)) + 0.1])
 
         # compute Dice and re-arrange scores in initial order
         hst = np.histogram2d(x.flatten(), y.flatten(), bins=label_edges)[0]

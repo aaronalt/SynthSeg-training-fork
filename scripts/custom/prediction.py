@@ -347,10 +347,12 @@ else:
     print("No validation curves were generated.")
 
 # draw_learning_curve plots 1 - loss from tensorboard event files; it shows the figure but does not
-# save it, so save the current figure afterwards.
+# save it, so save the current figure afterwards. It draws one curve per element of
+# path_tensorboard_files, where each element can be a list of event files concatenated into a single
+# curve (sorted() order is chronological for tfevents files), so pass all files as one curve.
 tb_files = sorted(glob(os.path.join(model_dir, '**', 'events.out.tfevents.*'), recursive=True))
 if tb_files:
-    draw_learning_curve(tb_files, exp)
+    draw_learning_curve([tb_files], [exp])
     plt.savefig(os.path.join(model_dir, 'learning_curve.png'), dpi=300)
     print(f"\nLearning curve saved to: {os.path.join(model_dir, 'learning_curve.png')}")
 else:

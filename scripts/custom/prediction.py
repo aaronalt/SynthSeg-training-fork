@@ -19,6 +19,7 @@ import datetime
 import re
 import shutil
 import pandas as pd
+import matplotlib.pyplot as plt
 from pathlib import Path
 from compare_dice_batch import resample_to_target, evaluate
 from claustrum_uncertainty import predict_with_tta
@@ -294,6 +295,13 @@ for path_model in model_files:
         print(f'Combined {len(npy_files)} .npy files into {csv_path}')
     else:
         print(f'No .npy files found under {path_segm}')
+
+    # Collect per-epoch Dice scores for plot_validation_curves (expects <dir>/epoch_*/dice.npy)
+    path_dice = os.path.join(path_segm, 'dice.npy')
+    if os.path.isfile(path_dice):
+        epoch_dir = os.path.join(model_dir, 'validation', f'epoch_{get_epoch(path_model):03d}')
+        os.makedirs(epoch_dir, exist_ok=True)
+        shutil.copy(path_dice, os.path.join(epoch_dir, 'dice.npy'))
     
     '''
     #############
@@ -322,14 +330,31 @@ for path_model in model_files:
         recompute=False
     )
     '''
-val_dirs = [d for d in Path(model_dir).glob('dice_finetune_*') if d.is_dir()]
-print(f"\nFound {len(val_dirs)} validation directories for plotting.")
-print(f"Validation directories: {[str(d) for d in val_dirs]}")
-plot_val = plot_validation_curves(val_dirs)
-if plot_val:
-    print(f"\nValidation curves saved to: {plot_val}")
+#############
+# Validation curves
+#############
+
+# plot_validation_curves expects one folder per network, with per-epoch subfolders containing dice.npy.
+# dice.npy rows are [138, 139] (no background row), so average both rows explicitly via eval_indices.
+validation_dir = os.path.join(model_dir, 'validation')
+epoch_dirs = [d for d in Path(validation_dir).glob('epoch_*') if d.is_dir()]
+print(f"\nFound {len(epoch_dirs)} epoch directories with Dice scores for plotting.")
+if epoch_dirs:
+    plot_validation_curves([validation_dir], architecture_names=[exp],
+                           eval_indices=np.array([0, 1]), plot_legend=True)
+    print(f"Validation curves saved to: {os.path.join(validation_dir, 'validation_curves.png')}")
 else:
-    print("\nNo validation curves were generated.")
+    print("No validation curves were generated.")
+
+# draw_learning_curve plots 1 - loss from tensorboard event files; it shows the figure but does not
+# save it, so save the current figure afterwards.
+tb_files = sorted(glob(os.path.join(model_dir, '**', 'events.out.tfevents.*'), recursive=True))
+if tb_files:
+    draw_learning_curve(tb_files, exp)
+    plt.savefig(os.path.join(model_dir, 'learning_curve.png'), dpi=300)
+    print(f"\nLearning curve saved to: {os.path.join(model_dir, 'learning_curve.png')}")
+else:
+    print(f"\nNo tensorboard event files found under {model_dir}; skipping learning curve.")
 
 
 '''

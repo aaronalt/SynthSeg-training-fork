@@ -72,11 +72,16 @@ def _match_gt_paths(path_segmentations, gt_paths):
     parsed_gt = [(path, subject_hemisphere(path)) for path in gt_paths]
     seg_keys = [subject_hemisphere(path) for path in path_segmentations]
     if all(key is not None and any(gt_key == key for _, gt_key in parsed_gt) for key in seg_keys):
-        return [(path_seg, next(path for path, gt_key in parsed_gt if gt_key == key))
-                for path_seg, key in zip(path_segmentations, seg_keys)]
-    if len(path_segmentations) == len(gt_paths):
-        return list(zip(path_segmentations, gt_paths))
-    raise ValueError('Could not match all segmentations to ground-truth files.')
+        matched = [(path_seg, next(path for path, gt_key in parsed_gt if gt_key == key))
+                   for path_seg, key in zip(path_segmentations, seg_keys)]
+    elif len(path_segmentations) == len(gt_paths):
+        matched = list(zip(path_segmentations, gt_paths))
+    else:
+        raise ValueError('Could not match all segmentations to ground-truth files.')
+    for path_seg, path_gt in matched:
+        if os.path.abspath(path_seg) == os.path.abspath(path_gt):
+            raise ValueError(f'Segmentation matched to itself as ground truth: {path_seg}')
+    return matched
 
 
 def predict(path_images,
@@ -300,16 +305,16 @@ def predict(path_images,
                                                (gt_image.shape, gt_image.affine),
                                                order=0)
 
-                aligned_seg_path = os.path.join(aligned_seg_dir, f'{index:06d}_seg.nii.gz')
-                aligned_gt_path = os.path.join(temp_dir, f'{index:06d}_gt.nii.gz')
+                gt_stem = Path(path_gt).stem.replace('.nii', '')
+                aligned_seg_path = os.path.join(aligned_seg_dir, f'{index:06d}_{gt_stem}_seg.nii.gz')
+                aligned_gt_path = os.path.join(temp_dir, f'{index:06d}_{gt_stem}_gt.nii.gz')
                 nib.save(aligned_seg, aligned_seg_path)
                 nib.save(gt_image, aligned_gt_path)
                 aligned_gt_paths.append(aligned_gt_path)
 
-            target_labels = [138, 139]
             evaluate.evaluation(aligned_gt_paths,
                                 aligned_seg_dir,
-                                label_list=target_labels,
+                                label_list=evaluation_labels,
                                 path_dice=os.path.join(eval_folder, 'dice.npy'),
                                 path_hausdorff=path_hausdorff,
                                 path_hausdorff_99=path_hausdorff_99,

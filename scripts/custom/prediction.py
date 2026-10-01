@@ -60,7 +60,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260923_093722_only_quality_labels_clau10x' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-# model_files = model_files[19:21]
+model_files = model_files[19:21]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
@@ -301,7 +301,12 @@ for path_model in model_files:
     if os.path.isfile(path_dice):
         epoch_dir = os.path.join(model_dir, 'validation', f'epoch_{get_epoch(path_model):03d}')
         os.makedirs(epoch_dir, exist_ok=True)
-        shutil.copy(path_dice, os.path.join(epoch_dir, 'dice.npy'))
+        # Mask exact-0 scores as NaN: each single-hemisphere file scores exactly 0 for its absent
+        # label, which would otherwise halve the curve. Caveat: a genuine dice of 0 (total failure)
+        # is masked too. plot_validation_curves averages with np.nanmean.
+        dice_scores = np.load(path_dice).astype('float64')
+        dice_scores[dice_scores == 0.0] = np.nan
+        np.save(os.path.join(epoch_dir, 'dice.npy'), dice_scores)
     
     '''
     #############
@@ -334,29 +339,51 @@ for path_model in model_files:
 # Validation curves
 #############
 
+# Experiments to compare on the validation/learning curves. Entries are experiment directory names
+# resolved against the models root (the parent of model_dir), or absolute paths. The current
+# experiment is always plotted first, so validation_curves.png is saved into its validation/ dir.
+compare_experiments = [exp]
+
 # plot_validation_curves expects one folder per network, with per-epoch subfolders containing dice.npy.
 # dice.npy rows are [138, 139] (no background row), so average both rows explicitly via eval_indices.
-validation_dir = os.path.join(model_dir, 'validation')
-epoch_dirs = [d for d in Path(validation_dir).glob('epoch_*') if d.is_dir()]
-print(f"\nFound {len(epoch_dirs)} epoch directories with Dice scores for plotting.")
-if epoch_dirs:
-    plot_validation_curves([validation_dir], architecture_names=[exp],
+models_root = os.path.dirname(model_dir)
+list_validation_dirs = []
+architecture_names = []
+list_tb_files = []
+list_tb_names = []
+for compare_exp in compare_experiments:
+    compare_model_dir = compare_exp if os.path.isabs(compare_exp) else os.path.join(models_root, compare_exp)
+    compare_name = os.path.basename(compare_model_dir.rstrip('/'))
+    compare_val_dir = os.path.join(compare_model_dir, 'validation')
+    if os.path.isdir(compare_val_dir):
+        list_validation_dirs.append(compare_val_dir)
+        architecture_names.append(compare_name)
+    else:
+        print(f"[WARNING] No validation directory for experiment '{compare_name}' "
+              f"({compare_val_dir}); skipping it on the validation curves.")
+    exp_tb_files = sorted(glob(os.path.join(compare_model_dir, '**', 'events.out.tfevents.*'), recursive=True))
+    if exp_tb_files:
+        list_tb_files.append(exp_tb_files)
+        list_tb_names.append(compare_name)
+
+print(f"\nPlotting validation curves for: {architecture_names}")
+if list_validation_dirs:
+    plot_validation_curves(list_validation_dirs, architecture_names=architecture_names,
                            eval_indices=np.array([0, 1]), plot_legend=True)
-    print(f"Validation curves saved to: {os.path.join(validation_dir, 'validation_curves.png')}")
+    print(f"Validation curves saved to: {os.path.join(list_validation_dirs[0], 'validation_curves.png')}")
 else:
     print("No validation curves were generated.")
 
 # draw_learning_curve plots 1 - loss from tensorboard event files; it shows the figure but does not
 # save it, so save the current figure afterwards. It draws one curve per element of
-# path_tensorboard_files, where each element can be a list of event files concatenated into a single
-# curve (sorted() order is chronological for tfevents files), so pass all files as one curve.
-tb_files = sorted(glob(os.path.join(model_dir, '**', 'events.out.tfevents.*'), recursive=True))
-if tb_files:
-    draw_learning_curve([tb_files], [exp])
+# path_tensorboard_files, so wrap each experiment's event files (sorted() order is chronological
+# for tfevents files) as a single element, with matching names.
+if list_tb_files:
+    draw_learning_curve(list_tb_files, list_tb_names)
     plt.savefig(os.path.join(model_dir, 'learning_curve.png'), dpi=300)
     print(f"\nLearning curve saved to: {os.path.join(model_dir, 'learning_curve.png')}")
 else:
-    print(f"\nNo tensorboard event files found under {model_dir}; skipping learning curve.")
+    print(f"\nNo tensorboard event files found under {models_root}; skipping learning curve.")
 
 
 '''

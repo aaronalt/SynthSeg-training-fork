@@ -3,13 +3,17 @@ Collect evaluation metrics (.npy: dice, hausdorff, hausdorff_95/99, mean_distanc
 metrics.csv (wide) and metrics_tidy.csv (long) WITHOUT re-running prediction or evaluation.
 
 Usage:
-    python collect_metrics.py [path ...]
+    python collect_metrics.py [--models MODEL_DIR] [path ...]
 
-Each argument can be:
+Each path argument can be:
   - a checkpoint seg folder containing .npy files (processed directly), or
   - a parent folder, which is swept recursively for subfolders containing .npy files
     (e.g. /home/althause/data/seg/<experiment> sweeps all its checkpoint folders).
-With no arguments, sweeps the default segmentation root /home/althause/data/seg.
+With no path arguments, sweeps the default segmentation root /home/althause/data/seg.
+
+--models MODEL_DIR additionally plots training/validation loss curves from the
+TensorBoard event files under MODEL_DIR (e.g. the experiment's model folder containing
+logs/train and logs/validation) and writes loss_curves.png there.
 
 If segmentations were deleted (DELETE_TMP_PREDICTIONS=True), subject columns fall back to
 subject_0..N (the .npy files alone don't record file names).
@@ -19,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from metrics_merge import merge_metrics_npy, summarize_per_epoch
+from metrics_merge import merge_metrics_npy, summarize_per_epoch, plot_loss_curves
 
 DEFAULT_SEG_ROOT = '/home/althause/data/seg'
 
@@ -33,7 +37,13 @@ def find_seg_folders(path):
 
 
 if __name__ == '__main__':
-    args = sys.argv[1:] or [DEFAULT_SEG_ROOT]
+    argv = sys.argv[1:]
+    models_dir = None
+    if '--models' in argv:
+        i = argv.index('--models')
+        models_dir = argv[i + 1]
+        del argv[i:i + 2]
+    args = argv or [DEFAULT_SEG_ROOT]
     n_written = 0
     for arg in args:
         folders = find_seg_folders(arg)
@@ -45,4 +55,6 @@ if __name__ == '__main__':
             n_written += csv_path is not None
         if folders:
             summarize_per_epoch(folders)
+    if models_dir:
+        plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')

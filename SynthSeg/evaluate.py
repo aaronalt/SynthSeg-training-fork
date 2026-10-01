@@ -375,8 +375,6 @@ def evaluation(gt_dir,
                 print('Ground-truth shape:', gt_labels.shape, flush=True)
                 print('Prediction shape:', seg.shape, flush=True)
 
-            dice_coefs[:n_labels, idx] = fast_dice(gt_labels, seg, label_list)
-
             # compute Dice scores for whole structures
             if compute_score_whole_structure:
                 temp_gt = (gt_labels > 0) * 1
@@ -407,16 +405,6 @@ def evaluation(gt_dir,
                         max_dists[index, idx, :] = np.array(tmp_max_dists)
                     else:
                         print(f"  [DEBUG 4] Label {label:2d}: MISSING (In GT: {in_gt}, In SEG: {in_seg}) -> Applying max penalty: {max(gt_labels.shape)}")
-                        mean_dists[index, idx] = max(gt_labels.shape)
-                        max_dists[index, idx, :] = np.array([max(gt_labels.shape)] * 3)
-                    # --- DEBUG 4: Label Match Status ---
-                    
-                    if (label in unique_gt_labels) & (label in unique_seg_labels):
-                        mask_gt = np.where(gt_labels == label, True, False)
-                        mask_seg = np.where(seg == label, True, False)
-                        tmp_max_dists, mean_dists[index, idx] = surface_distances(mask_gt, mask_seg, [100, 99, 95])
-                        max_dists[index, idx, :] = np.array(tmp_max_dists)
-                    else:
                         mean_dists[index, idx] = max(gt_labels.shape)
                         max_dists[index, idx, :] = np.array([max(gt_labels.shape)] * 3)
 

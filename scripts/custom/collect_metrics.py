@@ -17,6 +17,8 @@ subject_0..N (the .npy files alone don't record file names).
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from metrics_merge import merge_metrics_npy
 
 DEFAULT_SEG_ROOT = '/home/althause/data/seg'

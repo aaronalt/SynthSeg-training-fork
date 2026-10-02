@@ -6,7 +6,7 @@ Version: only_quality_labels_clau10x
 Changelog: -Claustrum weighted 10x -removed labels with low LOSO scores (5 subjects) -same labels used as clau_50x model
 #######
 """
-version = 'only_quality_labels_clau10x'
+version = 'only_quality_labels_0.66mm'
 
 import os
 import tensorflow as tf

@@ -1438,8 +1438,9 @@ class DiceLoss(Layer):
         scipy through tf.numpy_function -- no gradient needed, D is a constant weight map), S = soft
         outer-edge map of the prediction (pred minus its max-pool erosion, i.e. the predicted boundary
         ring, cf. Karimi & Salcudean), and the term is the 95th percentile of S * D over boundary-active
-        voxels (S > 0), via tf.sort + hard indexing at ceil(0.95 * N): gradients flow through the values,
-        not the ranks. Labels absent from the GT have D == 0 everywhere and contribute 0, like the Dice term."""
+        voxels (S > 1e-3), computed exactly as the k-th largest value via a memory-capped top-k (see
+        _hd95_single): gradients flow through the values, not the ranks. Labels absent from the GT have
+        D == 0 everywhere and contribute 0, like the Dice term."""
 
         # GT distance transforms, same shape as gt
         dist = tf.numpy_function(self._edt_maps, [gt], tf.float32)
@@ -1470,13 +1471,21 @@ class DiceLoss(Layer):
 
     @staticmethod
     def _hd95_single(inputs):
-        """95th percentile of w over voxels where s > 0. w and s are 1d tensors (one batch, one label)."""
+        """95th percentile of w over boundary-active voxels (s > 1e-3; true boundaries have
+        substantial s, float noise does not -- a lower threshold passes ~95% of the volume on
+        noisy predictions and OOMs the sort). w and s are 1d tensors (one batch, one label).
+        The percentile is computed exactly as the k-th largest value with k = N - ceil(0.95*N) + 1
+        (equivalent to sort + index at ceil(0.95*N)), via top-k instead of a full sort, with k
+        capped at 300k to bound GPU memory; the cap only engages for N > ~6M candidates, where it
+        slightly overestimates the percentile (degenerate dense-boundary case)."""
         w, s = inputs
-        v = tf.sort(tf.boolean_mask(w, s > 1e-6))
+        v = tf.boolean_mask(w, s > 1e-3)
         n = tf.shape(v)[0]
-        idx = tf.minimum(tf.maximum(tf.cast(tf.math.ceil(0.95 * tf.cast(n, 'float32')), 'int32'), 1),
-                         tf.maximum(n, 1)) - 1
-        return tf.cond(n > 0, lambda: v[idx], lambda: tf.constant(0., 'float32'))
+        rank = tf.maximum(tf.cast(tf.math.ceil(0.95 * tf.cast(n, 'float32')), 'int32'), 1)
+        k = tf.minimum(tf.maximum(n - rank + 1, 1), 300000)
+        return tf.cond(n > 0,
+                       lambda: tf.reduce_min(tf.math.top_k(v, k).values),
+                       lambda: tf.constant(0., 'float32'))
 
     @staticmethod
     def _edt_maps(gt_array):

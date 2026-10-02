@@ -8,7 +8,10 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-DISTANCE_METRICS = ('hausdorff', 'hausdorff_95', 'hausdorff_99', 'mean_distance')
+MAXIMIZE_METRICS = ('dice', 'precision', 'recall')
+MINIMIZE_METRICS = ('hausdorff', 'hausdorff_95', 'hausdorff_99', 'mean_distance')
+# kept for backwards compatibility
+DISTANCE_METRICS = MINIMIZE_METRICS
 
 
 def merge_metrics_npy(path_segm, eval_label_names=('138', '139')):
@@ -101,8 +104,8 @@ def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
         if dice.ndim != 2:
             continue
         present = dice != 0.0  # (n_labels, n_subjects) mask of present labels
-        arrays = {'dice': dice}
-        for name in DISTANCE_METRICS:
+        arrays = {}
+        for name in MAXIMIZE_METRICS + MINIMIZE_METRICS:
             f = folder / f'{name}.npy'
             if f.exists():
                 arr = np.load(f)
@@ -121,7 +124,7 @@ def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
         return None
 
     df = pd.DataFrame(rows)
-    metrics_order = ['dice'] + [m for m in DISTANCE_METRICS if m in set(df.metric)]
+    metrics_order = [m for m in MAXIMIZE_METRICS + MINIMIZE_METRICS if m in set(df.metric)]
 
     print('\nPer-epoch means (present labels only):')
     for name in metrics_order:
@@ -133,7 +136,7 @@ def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
     print('\nBest epoch per metric (by mean of both labels):')
     for name in metrics_order:
         sub = df[df.metric == name].groupby('epoch')['mean'].mean()
-        best = sub.idxmax() if name == 'dice' else sub.idxmin()
+        best = sub.idxmax() if name in MAXIMIZE_METRICS else sub.idxmin()
         print(f'  {name:<15}epoch {best} ({sub[best]:.4f})')
 
     if out_dir is None:

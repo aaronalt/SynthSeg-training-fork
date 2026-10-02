@@ -226,6 +226,8 @@ def evaluation(gt_dir,
                path_hausdorff_99=None,
                path_hausdorff_95=None,
                path_mean_distance=None,
+               path_precision=None,
+               path_recall=None,
                crop_margin_around_gt=10,
                list_incorrect_labels=None,
                list_correct_labels=None,
@@ -252,6 +254,10 @@ def evaluation(gt_dir,
     :param path_hausdorff_95: same as for path_hausdorff but for the 95th percentile of the boundary distance.
     :param path_mean_distance: path where the resulting mean distances will be writen as numpy array (only if
     compute_distances is True). Default is None, where the array is not saved.
+    :param path_precision: path where per-label precision scores will be writen as numpy array.
+    Default is None, where the array is not saved.
+    :param path_recall: path where per-label recall scores will be writen as numpy array.
+    Default is None, where the array is not saved.
     :param crop_margin_around_gt: (optional) margin by which to crop around the gt volumes, in order to compute the
     scores more efficiently. If 0, no cropping is performed.
     :param list_incorrect_labels: (optional) this option enables to replace some label values in the maps in seg_dir by
@@ -270,9 +276,11 @@ def evaluation(gt_dir,
     compute_hausdorff_99 = not os.path.isfile(path_hausdorff_99) if (path_hausdorff_99 is not None) else False
     compute_hausdorff_95 = not os.path.isfile(path_hausdorff_95) if (path_hausdorff_95 is not None) else False
     compute_mean_dist = not os.path.isfile(path_mean_distance) if (path_mean_distance is not None) else False
+    compute_precision = not os.path.isfile(path_precision) if (path_precision is not None) else False
+    compute_recall = not os.path.isfile(path_recall) if (path_recall is not None) else False
     compute_hd = [compute_hausdorff, compute_hausdorff_99, compute_hausdorff_95]
 
-    if compute_dice | any(compute_hd) | compute_mean_dist | recompute:
+    if compute_dice | any(compute_hd) | compute_mean_dist | compute_precision | compute_recall | recompute:
 
         # get list label maps to compare
         if isinstance(gt_dir, (list, tuple)):
@@ -296,6 +304,10 @@ def evaluation(gt_dir,
         n_labels = len(label_list)
         max_label = np.max(label_list) + 1
 
+        # --- DEBUG 1: Expected Target Labels ---
+        print(f"\n[DEBUG 1] Total Target Labels ({n_labels}): {label_list}")
+        print(f"[DEBUG 1] Total files to evaluate: {len(path_segs)}")
+
         # initialise result matrices
         if compute_score_whole_structure:
             max_dists = np.zeros((n_labels + 1, len(path_segs), 3))
@@ -305,6 +317,8 @@ def evaluation(gt_dir,
             max_dists = np.zeros((n_labels, len(path_segs), 3))
             mean_dists = np.zeros((n_labels, len(path_segs)))
             dice_coefs = np.zeros((n_labels, len(path_segs)))
+        precision_coefs = np.zeros_like(dice_coefs)
+        recall_coefs = np.zeros_like(dice_coefs)
 
         # loop over segmentations
         loop_info = utils.LoopInfo(len(path_segs), 10, 'evaluating', print_time=True)
@@ -312,9 +326,21 @@ def evaluation(gt_dir,
             if verbose:
                 loop_info.update(idx)
 
+            # --- DEBUG 2: Matched Files ---
+            print(f"\n==========================================")
+            print(f"[DEBUG 2] Index {idx}")
+            print(f"  GT File:  {os.path.basename(path_gt)}")
+            print(f"  SEG File: {os.path.basename(path_seg)}")
+            print(f"==========================================")
+
             # load gt labels and segmentation
             gt_labels = utils.load_volume(path_gt, dtype='int', aff_ref=np.eye(4))
             seg = utils.load_volume(path_seg, dtype='int', aff_ref=np.eye(4))
+
+            print(f"[EVAL CHECK] GT Path : {os.path.basename(path_gt)} (Voxels > 0: {np.count_nonzero(gt_labels)})")
+            print(f"[EVAL CHECK] SEG Path: {os.path.basename(path_seg)} (Voxels > 0: {np.count_nonzero(seg)})")
+            print(f"[EVAL CHECK] Shared Memory Buffer?: {gt_labels.ctypes.data == seg.ctypes.data}")
+            print(f"[EVAL CHECK] Identical Array Values?: {np.array_equal(gt_labels, seg)}")
 
             # ==================== GT LABEL REMAPPING FIX ====================
             # If GT contains generic label '1', remap it to 138 (LH) or 139 (RH)
@@ -339,6 +365,8 @@ def evaluation(gt_dir,
             # --- DEBUG 3: Raw Label Values Present ---
             gt_unique = np.unique(gt_labels)
             seg_unique = np.unique(seg)
+            print(f"[DEBUG 3] Unique values in GT array:  {gt_unique}")
+            print(f"[DEBUG 3] Unique values in SEG array: {seg_unique}")
 
             if path_mask is not None:
                 mask = utils.load_volume(path_mask, dtype='bool', aff_ref=np.eye(4))
@@ -356,6 +384,15 @@ def evaluation(gt_dir,
             # compute Dice scores
             dice_coefs[:n_labels, idx] = fast_dice(gt_labels, seg, label_list)
 
+            # compute precision and recall per label from boolean masks (same convention as dice:
+            # an absent label in both maps, or no true positives, scores 0)
+            for index, label in enumerate(label_list):
+                mask_gt = gt_labels == label
+                mask_seg = seg == label
+                tp = np.count_nonzero(mask_gt & mask_seg)
+                precision_coefs[index, idx] = tp / (np.count_nonzero(mask_seg) + 1e-5)
+                recall_coefs[index, idx] = tp / (np.count_nonzero(mask_gt) + 1e-5)
+
             if gt_labels.shape != seg.shape:
                 print('\nShape mismatch at evaluation index {}'.format(idx), flush=True)
                 print('Ground truth:', path_gt, flush=True)
@@ -368,6 +405,9 @@ def evaluation(gt_dir,
                 temp_gt = (gt_labels > 0) * 1
                 temp_seg = (seg > 0) * 1
                 dice_coefs[-1, idx] = dice(temp_gt, temp_seg)
+                tp = np.count_nonzero((temp_gt > 0) & (temp_seg > 0))
+                precision_coefs[-1, idx] = tp / (np.sum(temp_seg) + 1e-5)
+                recall_coefs[-1, idx] = tp / (np.sum(temp_gt) + 1e-5)
             else:
                 temp_gt = temp_seg = None
 
@@ -386,13 +426,13 @@ def evaluation(gt_dir,
                     in_seg = label in unique_seg_labels
                     
                     if in_gt and in_seg:
-                        # print(f"  [DEBUG 4] Label {label:2d}: PRESENT in both GT and SEG -> Calculating surface distance...")
+                        print(f"  [DEBUG 4] Label {label:2d}: PRESENT in both GT and SEG -> Calculating surface distance...")
                         mask_gt = np.where(gt_labels == label, True, False)
                         mask_seg = np.where(seg == label, True, False)
                         tmp_max_dists, mean_dists[index, idx] = surface_distances(mask_gt, mask_seg, [100, 99, 95])
                         max_dists[index, idx, :] = np.array(tmp_max_dists)
                     else:
-                        # print(f"  [DEBUG 4] Label {label:2d}: MISSING (In GT: {in_gt}, In SEG: {in_seg}) -> Applying max penalty: {max(gt_labels.shape)}")
+                        print(f"  [DEBUG 4] Label {label:2d}: MISSING (In GT: {in_gt}, In SEG: {in_seg}) -> Applying max penalty: {max(gt_labels.shape)}")
                         mean_dists[index, idx] = max(gt_labels.shape)
                         max_dists[index, idx, :] = np.array([max(gt_labels.shape)] * 3)
 
@@ -405,6 +445,12 @@ def evaluation(gt_dir,
         if path_dice is not None:
             utils.mkdir(os.path.dirname(path_dice))
             np.save(path_dice, dice_coefs)
+        if path_precision is not None:
+            utils.mkdir(os.path.dirname(path_precision))
+            np.save(path_precision, precision_coefs)
+        if path_recall is not None:
+            utils.mkdir(os.path.dirname(path_recall))
+            np.save(path_recall, recall_coefs)
         if path_hausdorff is not None:
             utils.mkdir(os.path.dirname(path_hausdorff))
             np.save(path_hausdorff, max_dists[..., 0])

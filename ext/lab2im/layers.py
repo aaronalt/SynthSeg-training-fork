@@ -1316,6 +1316,11 @@ class DiceLoss(Layer):
     redundant when we have several labels. This is only used if boundary_weight is not 0.
     :param enable_checks: (optional) whether to make sure that the 2 input tensors are probabilistic (i.e. the label
     probabilities sum to 1 at each voxel location). Default is True.
+    :param hd95_weight: (optional) weight of an additional differentiable HD95 (95th-percentile Hausdorff distance)
+    boundary term: total_loss = dice_loss + hd95_weight * hd95. The HD95 term uses GT distance transforms
+    (computed with scipy via tf.numpy_function, which is fine as they are constant weight maps; gradients flow
+    through the predicted softmax only) and a soft boundary map of the prediction. Distances are normalised by
+    the volume diagonal so the term is ~[0, 1] like the Dice loss. Default is 0 (disabled).
     """
 
     def __init__(self,
@@ -1324,6 +1329,7 @@ class DiceLoss(Layer):
                  boundary_dist=3,
                  skip_background=True,
                  enable_checks=True,
+                 hd95_weight=0.0,
                  **kwargs):
 
         self.class_weights = class_weights
@@ -1333,8 +1339,10 @@ class DiceLoss(Layer):
         self.boundary_dist = boundary_dist
         self.skip_background = skip_background
         self.enable_checks = enable_checks
+        self.hd95_weight = hd95_weight
         self.spatial_axes = None
         self.avg_pooling_layer = None
+        self.max_pooling_layer = None
         super(DiceLoss, self).__init__(**kwargs)
 
     def get_config(self):
@@ -1344,6 +1352,7 @@ class DiceLoss(Layer):
         config["boundary_dist"] = self.boundary_dist
         config["skip_background"] = self.skip_background
         config["enable_checks"] = self.enable_checks
+        config["hd95_weight"] = self.hd95_weight
         return config
 
     def build(self, input_shape):
@@ -1356,6 +1365,7 @@ class DiceLoss(Layer):
         n_labels = inshape[-1]
         self.spatial_axes = list(range(1, n_dims + 1))
         self.avg_pooling_layer = getattr(keras.layers, 'AvgPool%dD' % n_dims)
+        self.max_pooling_layer = getattr(keras.layers, 'MaxPool%dD' % n_dims)
         self.skip_background = False if n_labels == 1 else self.skip_background
 
         # build tensor with class weights
@@ -1409,12 +1419,76 @@ class DiceLoss(Layer):
                 weights_to_use = 1 / (tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes) + 1e-8)
             else:
                 weights_to_use = 1 / (tf.reduce_sum(gt, self.spatial_axes) + 1e-8)
+        normalized_weights = None
         if weights_to_use is not None:
             # Use local variable to avoid modifying class attribute (causes graph scope issues)
             normalized_weights = weights_to_use / (tf.reduce_sum(weights_to_use, -1, keepdims=True) + 1e-8)
             loss = tf.reduce_sum(loss * normalized_weights, -1)
+        loss = tf.math.reduce_mean(loss)
 
-        return tf.math.reduce_mean(loss)
+        # add HD95 boundary term
+        if self.hd95_weight:
+            loss = loss + self.hd95_weight * self._hd95_loss(gt, pred, normalized_weights)
+
+        return loss
+
+    def _hd95_loss(self, gt, pred, normalized_weights):
+        """Differentiable HD95 surrogate, per batch element and label. For each label: D = EDT(1 - gt)
+        (distance to the nearest GT foreground voxel, normalised by the volume diagonal, computed with
+        scipy through tf.numpy_function -- no gradient needed, D is a constant weight map), S = soft
+        outer-edge map of the prediction (pred minus its max-pool erosion, i.e. the predicted boundary
+        ring, cf. Karimi & Salcudean), and the term is the 95th percentile of S * D over boundary-active
+        voxels (S > 0), via tf.sort + hard indexing at ceil(0.95 * N): gradients flow through the values,
+        not the ranks. Labels absent from the GT have D == 0 everywhere and contribute 0, like the Dice term."""
+
+        # GT distance transforms, same shape as gt
+        dist = tf.numpy_function(self._edt_maps, [gt], tf.float32)
+        dist.set_shape(gt.shape)
+
+        # soft outer edge of the prediction: erosion = 1 - maxpool(1 - pred), edge = pred - erosion
+        n_labels = pred.get_shape().as_list()[-1]
+        erosion = 1 - self.max_pooling_layer(pool_size=3, strides=1, padding='same')(1 - pred)
+        soft_boundary = K.relu(pred - erosion)
+
+        # 95th percentile of S * D over boundary-active voxels, per batch element and label
+        weighted = tf.reshape(soft_boundary * dist, [tf.shape(pred)[0], -1, n_labels])
+        boundary = tf.reshape(soft_boundary, [tf.shape(pred)[0], -1, n_labels])
+        weighted = tf.transpose(weighted, [0, 2, 1])  # (batch, n_labels, n_voxels)
+        boundary = tf.transpose(boundary, [0, 2, 1])
+        hd95 = tf.map_fn(lambda x: tf.map_fn(self._hd95_single, x, dtype='float32'),
+                         (weighted, boundary), dtype='float32')  # (batch, n_labels)
+
+        # average across foreground labels, honouring class weights
+        if self.skip_background:
+            hd95 = hd95[:, 1:]
+            if normalized_weights is not None:
+                normalized_weights = normalized_weights[:, 1:]
+        if normalized_weights is not None:
+            weights = normalized_weights / (tf.reduce_sum(normalized_weights, -1, keepdims=True) + 1e-8)
+            hd95 = tf.reduce_sum(hd95 * weights, -1)
+        return tf.math.reduce_mean(hd95)
+
+    @staticmethod
+    def _hd95_single(inputs):
+        """95th percentile of w over voxels where s > 0. w and s are 1d tensors (one batch, one label)."""
+        w, s = inputs
+        v = tf.sort(tf.boolean_mask(w, s > 1e-6))
+        n = tf.shape(v)[0]
+        idx = tf.minimum(tf.maximum(tf.cast(tf.math.ceil(0.95 * tf.cast(n, 'float32')), 'int32'), 1),
+                         tf.maximum(n, 1)) - 1
+        return tf.cond(n > 0, lambda: v[idx], lambda: tf.constant(0., 'float32'))
+
+    @staticmethod
+    def _edt_maps(gt_array):
+        """Per batch element and label: distance to the nearest GT foreground voxel (EDT of the
+        complement of the binary GT mask), normalised by the volume diagonal to ~[0, 1]."""
+        from scipy.ndimage import distance_transform_edt
+        dist = np.zeros_like(gt_array, dtype='float32')
+        norm = np.linalg.norm(np.array(gt_array.shape[1:-1], dtype='float32'))
+        for b in range(gt_array.shape[0]):
+            for c in range(gt_array.shape[-1]):
+                dist[b, ..., c] = distance_transform_edt(gt_array[b, ..., c] <= 0.5) / norm
+        return dist
 
     def compute_output_shape(self, input_shape):
         return [[]]

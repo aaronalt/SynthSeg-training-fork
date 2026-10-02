@@ -18,6 +18,7 @@ logs/train and logs/validation) and writes loss_curves.png there.
 If segmentations were deleted (DELETE_TMP_PREDICTIONS=True), subject columns fall back to
 subject_0..N (the .npy files alone don't record file names).
 """
+import os
 import sys
 from pathlib import Path
 
@@ -45,6 +46,7 @@ if __name__ == '__main__':
         del argv[i:i + 2]
     args = argv or [DEFAULT_SEG_ROOT]
     n_written = 0
+    loss_plotted = False
     for arg in args:
         folders = find_seg_folders(arg)
         if not folders:
@@ -55,6 +57,10 @@ if __name__ == '__main__':
             n_written += csv_path is not None
         if folders:
             summarize_per_epoch(folders)
-    if models_dir:
+            if models_dir and not loss_plotted:
+                plot_loss_curves(models_dir,
+                                 out_dir=os.path.commonpath([str(f) for f in folders]))
+                loss_plotted = True
+    if models_dir and not loss_plotted:
         plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')

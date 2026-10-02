@@ -1451,13 +1451,27 @@ class DiceLoss(Layer):
         erosion = 1 - self.max_pooling_layer(pool_size=3, strides=1, padding='same')(1 - pred)
         soft_boundary = K.relu(pred - erosion)
 
-        # 95th percentile of S * D over boundary-active voxels, per batch element and label
-        weighted = tf.reshape(soft_boundary * dist, [tf.shape(pred)[0], -1, n_labels])
-        boundary = tf.reshape(soft_boundary, [tf.shape(pred)[0], -1, n_labels])
-        weighted = tf.transpose(weighted, [0, 2, 1])  # (batch, n_labels, n_voxels)
-        boundary = tf.transpose(boundary, [0, 2, 1])
-        hd95 = tf.map_fn(lambda x: tf.map_fn(self._hd95_single, x, dtype='float32'),
-                         (weighted, boundary), dtype='float32')  # (batch, n_labels)
+        # select candidate voxels BEFORE looping over classes: running map_fn over full-volume
+        # slices makes the backward pass restack [n_labels, n_voxels] gradient tensors (~GBs).
+        # Instead gather the boundary-active voxels of ALL classes once (union mask), and loop
+        # over classes on the reduced (n_labels, n_cand) tensors -- n_cand is ~hundreds for thin
+        # structures, and capped at 1M (by union score) for the degenerate dense-boundary case.
+        s_flat = tf.reshape(soft_boundary, [tf.shape(pred)[0], -1, n_labels])  # (batch, n_voxels, n_labels)
+        d_flat = tf.reshape(dist, [tf.shape(pred)[0], -1, n_labels])
+
+        def _hd95_batch(inputs):
+            s_b, d_b = inputs  # (n_voxels, n_labels), one batch element
+            union_score = tf.reduce_max(s_b, axis=-1)  # (n_voxels,)
+            cand_idx_all = tf.where(union_score > 1e-3)[:, 0]
+            cand_idx = tf.cond(tf.shape(cand_idx_all)[0] > 1000000,
+                               lambda: tf.cast(tf.math.top_k(union_score, 1000000).indices, 'int64'),
+                               lambda: cand_idx_all)
+            s_sel = tf.transpose(tf.gather(s_b, cand_idx), [1, 0])  # (n_labels, n_cand)
+            d_sel = tf.transpose(tf.gather(d_b, cand_idx), [1, 0])
+            # per-class percentile over its own active voxels within the union set
+            return tf.map_fn(self._hd95_single, (s_sel * d_sel, s_sel), dtype='float32')
+
+        hd95 = tf.map_fn(_hd95_batch, (s_flat, d_flat), dtype='float32')  # (batch, n_labels)
 
         # average across foreground labels, honouring class weights
         if self.skip_background:

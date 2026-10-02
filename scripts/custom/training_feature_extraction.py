@@ -44,13 +44,6 @@ from ext.neuron import models as nrn_models
 import threading
 
 
-def dice_loss(y_true, y_pred):
-    smooth = 1e-5
-    intersect = tf.reduce_sum(y_true * y_pred)
-    denominator = tf.reduce_sum(y_true) + tf.reduce_sum(y_pred)
-    return 1. - (2. * intersect + smooth) / (denominator + smooth)
-
-
 def save_training_params(model_dir, params):
     """Save training parameters to a JSON file in the model directory."""
     param_file = os.path.join(model_dir, 'training_params.json')
@@ -119,7 +112,8 @@ def training(labels_dir,
              skip_pretrain=False,
              finetune=False,
              validation_steps=100,
-             label_weights=None):
+             label_weights=None,
+             hd95_weight=0.1):
 
     # check epochs
     assert (wl2_epochs > 0) | (dice_epochs > 0), \
@@ -165,6 +159,7 @@ def training(labels_dir,
         'skip_pretrain': skip_pretrain,
         'finetune': finetune,
         'label_weights': label_weights,
+        'hd95_weight': hd95_weight,
     })
 
     # get label lists
@@ -324,7 +319,8 @@ def training(labels_dir,
 
         # Create fresh dice model with unfrozen weights
         dice_model = models.Model(unet_model.inputs, unet_model.outputs)
-        dice_model = metrics.metrics_model(dice_model, segmentation_labels, 'dice', class_weights=label_weights)
+        dice_model = metrics.metrics_model(dice_model, segmentation_labels, 'dice',
+                                           class_weights=label_weights, hd95_weight=hd95_weight)
 
         # Use lower learning rate for finetuning
         finetune_lr = lr / 10

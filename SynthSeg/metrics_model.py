@@ -24,7 +24,7 @@ from keras.models import Model
 from ext.lab2im import layers
 
 
-def metrics_model(input_model, label_list, metrics='dice', class_weights=None):
+def metrics_model(input_model, label_list, metrics='dice', class_weights=None, hd95_weight=0.0):
 
     # get prediction
     last_tensor = input_model.outputs[0]
@@ -50,7 +50,8 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None):
             class_weights=class_weights,
             boundary_weights=2,      # Extra weight for boundary voxels
             boundary_dist=2,         # Within 2 voxels of boundary (smaller for thin structures)
-            skip_background=True     # Don't weight background boundaries (default)
+            skip_background=True,    # Don't weight background boundaries (default)
+            hd95_weight=hd95_weight  # Weight of the HD95 boundary term (0 = disabled)
         )([labels_gt, last_tensor])
 
     elif metrics == 'wl2':

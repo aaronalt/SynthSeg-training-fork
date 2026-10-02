@@ -169,28 +169,36 @@ def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
     return df
 
 
-def _read_tb_scalars(event_files, tags=('epoch_loss', 'loss')):
+def _read_tb_scalars(event_files, tags=('epoch_loss', 'loss', 'val_loss')):
     """Read (step, value) scalar series from TF event files, handling both TF1
     (simple_value) and TF2/Keras3 (tensor field) encodings.
-    Returns {tag: [(step, value), ...]}."""
+    Returns (series, seen) where series is {tag: [(step, value), ...]} for the requested
+    tags, and seen is {tag: count} for ALL scalar tags encountered (for diagnostics)."""
+    # same import path as SynthSeg/validate.py (proven to work on the server)
+    from tensorflow.python.summary.summary_iterator import summary_iterator
     from tensorflow.python.framework.tensor_util import make_ndarray
-    from tensorflow.compat.v1.train import summary_iterator
 
     series = {}
+    seen = {}
     for event_file in sorted(map(str, event_files)):
-        for event in summary_iterator(event_file):
-            for v in event.summary.value:
-                if v.tag not in tags:
-                    continue
-                kind = v.WhichOneof('kind')
-                if kind == 'simple_value':
-                    value = v.simple_value
-                elif kind == 'tensor':
-                    value = float(make_ndarray(v.tensor))
-                else:
-                    continue
-                series.setdefault(v.tag, []).append((event.step, value))
-    return series
+        try:
+            events = summary_iterator(event_file)
+            for event in events:
+                for v in event.summary.value:
+                    seen[v.tag] = seen.get(v.tag, 0) + 1
+                    if v.tag not in tags:
+                        continue
+                    kind = v.WhichOneof('kind')
+                    if kind == 'simple_value':
+                        value = v.simple_value
+                    elif kind == 'tensor':
+                        value = float(make_ndarray(v.tensor))
+                    else:
+                        continue
+                    series.setdefault(v.tag, []).append((event.step, value))
+        except Exception as e:  # e.g. tf.errors.DataLossError on a truncated last record
+            print(f'[WARNING] could not read {event_file}: {type(e).__name__}: {e}')
+    return series, seen
 
 
 def plot_loss_curves(models_dir, out_dir=None):
@@ -202,9 +210,22 @@ def plot_loss_curves(models_dir, out_dir=None):
     :param out_dir: where to write loss_curves.png.
     """
     models_dir = Path(models_dir)
+    if not models_dir.is_dir():
+        print(f'[WARNING] --models directory does not exist: {models_dir}')
+        return
     event_files = sorted(models_dir.rglob('events.out.tfevents.*'))
+    print(f'Found {len(event_files)} TensorBoard event file(s) under {models_dir}:')
+    for f in event_files:
+        print(f'  {f}')
     if not event_files:
-        print(f'No TensorBoard event files found under {models_dir}')
+        print('Directory contents (to help locate the logs):')
+        for p in sorted(models_dir.iterdir()):
+            print(f'  {p.name}{"/" if p.is_dir() else ""}')
+        logs_dir = models_dir / 'logs'
+        if logs_dir.is_dir():
+            print('logs/ contents:')
+            for p in sorted(logs_dir.iterdir()):
+                print(f'  {p.name}{"/" if p.is_dir() else ""}')
         return
 
     groups = {}
@@ -214,16 +235,21 @@ def plot_loss_curves(models_dir, out_dir=None):
     try:
         curves = {}
         for name, files in groups.items():
-            series = _read_tb_scalars(files)
+            series, seen = _read_tb_scalars(files)
+            print(f'{name}: scalar tags seen: '
+                  + (', '.join(f'{t} (x{n})' for t, n in sorted(seen.items())) or 'none'))
             tag = 'epoch_loss' if 'epoch_loss' in series else ('loss' if 'loss' in series else None)
             if tag:
                 pts = sorted(series[tag])
                 curves[name] = (np.array([s for s, _ in pts]), np.array([v for _, v in pts]))
         if not curves:
-            print(f'No loss scalars found in event files under {models_dir}')
+            print(f'[WARNING] no loss scalars (epoch_loss/loss/val_loss) found in event files '
+                  f'under {models_dir} -- see tags listed above.')
             return
     except ImportError:
-        print('tensorflow is required to read event files; skipping loss curves.')
+        import traceback
+        print('[WARNING] could not import tensorflow summary tools; skipping loss curves:')
+        traceback.print_exc()
         return
 
     import matplotlib

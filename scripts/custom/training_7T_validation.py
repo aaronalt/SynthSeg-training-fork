@@ -59,7 +59,7 @@ train_path_7T, val_path_7T, _, val_probs_7T = create_train_test_split(
     seed=42,
     prob_mode='uniform',
     verbose=True,
-    exclude_subjects=['sub-8510', 'sub-8399', 'sub-7796', 'sub-8233']
+    exclude_subjects=['sub-8510', 'sub-8399', 'sub-8233']
 )
 
 # Get 7T validation subject IDs
@@ -74,7 +74,7 @@ print(f"7T training path: {train_path_7T}")
 print(f"7T validation path: {val_path_7T}")
 
 # === STEP 2: Add high-quality 3T subjects to validation ===
-print("\n--- Step 2: Adding high-quality 3T subjects to validation ---")
+# print("\n--- Step 2: Adding high-quality 3T subjects to validation ---")
 # print(f"High-quality 3T subjects for validation: {HIGH_QUALITY_3T_VALIDATION}")
 
 # Create combined validation directory
@@ -173,7 +173,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Shape and resolution
-target_res = 0.50
+target_res = 0.66
 output_shape = 192
 n_channels = 1
 

@@ -206,10 +206,10 @@ def _read_tb_scalars(event_files, tags=('epoch_loss', 'loss', 'val_loss')):
                     seen[v.tag] = seen.get(v.tag, 0) + 1
                     if v.tag not in tags:
                         continue
-                    kind = v.WhichOneof('kind')
-                    if kind == 'simple_value':
+                    # HasField works regardless of proto oneof naming across TF versions
+                    if v.HasField('simple_value'):
                         value = v.simple_value
-                    elif kind == 'tensor':
+                    elif v.HasField('tensor'):
                         value = tensor_to_float(v.tensor)
                     else:
                         continue

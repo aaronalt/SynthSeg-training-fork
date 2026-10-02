@@ -308,11 +308,11 @@ def draw_learning_curve(path_tensorboard_files, architecture_names, figsize=(11,
                 for v in e.summary.value:
                     if v.tag == 'loss' or v.tag == 'accuracy' or v.tag == 'epoch_loss':
                         # TF2/Keras3 event files store scalars as tensors, where simple_value
-                        # defaults to 0.0; read the tensor payload in that case
-                        kind = v.WhichOneof('kind')
-                        if kind == 'simple_value':
+                        # defaults to 0.0; read the tensor payload in that case.
+                        # HasField works regardless of proto oneof naming across TF versions.
+                        if v.HasField('simple_value'):
                             list_losses.append(v.simple_value)
-                        elif kind == 'tensor':
+                        elif v.HasField('tensor'):
                             list_losses.append(tensor_to_float(v.tensor))
                         else:
                             continue

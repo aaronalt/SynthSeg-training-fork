@@ -2,11 +2,12 @@
 SynthSeg training script for claustrum segmentation
 APPROACH: 80% 7T train, 20% 7T validation 
 #######
-Version: only_quality_labels_clau10x
-Changelog: -Claustrum weighted 10x -removed labels with low LOSO scores (5 subjects) -same labels used as clau_50x model
+Version: HD95_loss
+Changelog: -Claustrum weighted 10x -removed labels with low LOSO scores (5 subjects) -same labels used as clau_50x model -added compound HD 95 loss to boundary
+Check: -do doundary weights need to be set again (currently at 2 in training_feature_extraction)
 #######
 """
-version = 'only_quality_labels_0.66mm'
+version = 'HD95_loss'
 
 import os
 import tensorflow as tf
@@ -59,7 +60,7 @@ train_path_7T, val_path_7T, _, val_probs_7T = create_train_test_split(
     seed=42,
     prob_mode='uniform',
     verbose=True,
-    exclude_subjects=['sub-8510', 'sub-8399', 'sub-8233']
+    exclude_subjects=['sub-8510', 'sub-8399', 'sub-7796', 'sub-8233']
 )
 
 # Get 7T validation subject IDs
@@ -74,7 +75,7 @@ print(f"7T training path: {train_path_7T}")
 print(f"7T validation path: {val_path_7T}")
 
 # === STEP 2: Add high-quality 3T subjects to validation ===
-# print("\n--- Step 2: Adding high-quality 3T subjects to validation ---")
+print("\n--- Step 2: Adding high-quality 3T subjects to validation ---")
 # print(f"High-quality 3T subjects for validation: {HIGH_QUALITY_3T_VALIDATION}")
 
 # Create combined validation directory
@@ -172,8 +173,11 @@ label_weights = np.ones(len(path_segmentation_labels))
 for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
+# Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
+hd95_weight = 0.1
+
 # Shape and resolution
-target_res = 0.66
+target_res = 0.50
 output_shape = 192
 n_channels = 1
 
@@ -251,5 +255,6 @@ training(all_train_paths,
          max_res_aniso=max_res_aniso,
          prior_means=means,
          prior_stds=stds,
-         label_weights=label_weights
+         label_weights=label_weights,
+         hd95_weight=hd95_weight
          )

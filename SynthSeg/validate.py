@@ -22,6 +22,26 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.python.summary.summary_iterator import summary_iterator
 
+
+def tensor_to_float(tensor_proto):
+    """Decode a scalar tensor proto across TF versions."""
+    try:
+        from tensorflow.python.framework.tensor_util import make_ndarray
+        return float(make_ndarray(tensor_proto))
+    except ImportError:
+        pass
+    import tensorflow as tf
+    try:
+        return float(tf.make_ndarray(tensor_proto))
+    except AttributeError:
+        pass
+    # manual fallback: scalar protos store the value in typed repeated fields
+    for field in ('float_val', 'double_val', 'int_val', 'int64_val'):
+        values = getattr(tensor_proto, field)
+        if values:
+            return float(values[0])
+    raise ValueError('could not decode scalar tensor proto')
+
 # project imports
 from SynthSeg.predict import predict
 
@@ -209,14 +229,18 @@ def plot_validation_curves(list_validation_dirs, architecture_names=None, eval_i
             # build names and create folders
             path_epoch_scores = os.path.join(net_val_dir, epoch_dir, 'dice.npy')
             if os.path.isfile(path_epoch_scores):
+                # use nanmean so NaN-masked entries (e.g. absent labels) are skipped; note that a
+                # genuine dice of exactly 0 (total failure) is masked as NaN upstream as well
                 if eval_idx is not None:
-                    list_net_scores.append(np.mean(np.abs(np.load(path_epoch_scores)[eval_idx, :])))
+                    epoch_score = np.nanmean(np.abs(np.load(path_epoch_scores)[eval_idx, :]))
                 else:
                     if skip_first_dice_row:
-                        list_net_scores.append(np.mean(np.abs(np.load(path_epoch_scores)[1:, :])))
+                        epoch_score = np.nanmean(np.abs(np.load(path_epoch_scores)[1:, :]))
                     else:
-                        list_net_scores.append(np.mean(np.abs(np.load(path_epoch_scores))))
-                list_epochs.append(int(re.sub('[^0-9]', '', epoch_dir)))
+                        epoch_score = np.nanmean(np.abs(np.load(path_epoch_scores)))
+                if not np.isnan(epoch_score):  # skip epochs where every score is masked
+                    list_net_scores.append(epoch_score)
+                    list_epochs.append(int(re.sub('[^0-9]', '', epoch_dir)))
 
         # plot validation scores for current architecture
         if list_net_scores:  # check that archi has been validated for at least 1 epoch
@@ -231,6 +255,9 @@ def plot_validation_curves(list_validation_dirs, architecture_names=None, eval_i
             print('max score: %0.3f' % max_score)
             plt.plot(list_epochs, list_net_scores, label=legend_label, linestyle=linestyle, color=colour)
             plt.scatter(epoch_max_score, max_score, s=size_max_circle, color=colour)
+        else:
+            print(f'\n[WARNING] {net_name}: no plottable epochs (no dice.npy found, or all scores '
+                  f'masked as NaN because every dice was exactly 0). Curve will be missing.')
 
     # finalise plot
     plt.grid()
@@ -280,8 +307,23 @@ def draw_learning_curve(path_tensorboard_files, architecture_names, figsize=(11,
             for e in summary_iterator(path):
                 for v in e.summary.value:
                     if v.tag == 'loss' or v.tag == 'accuracy' or v.tag == 'epoch_loss':
-                        list_losses.append(v.simple_value)
+                        # TF2/Keras3 event files store scalars as tensors, where simple_value
+                        # defaults to 0.0; read the tensor payload in that case
+                        kind = v.WhichOneof('kind')
+                        if kind == 'simple_value':
+                            list_losses.append(v.simple_value)
+                        elif kind == 'tensor':
+                            list_losses.append(tensor_to_float(v.tensor))
+                        else:
+                            continue
                         list_epochs.append(e.step)
+        # diagnostics: show what was actually read from the event files (guards against silently
+        # plotting 1 - 0 when tags or scalar encodings don't match)
+        if list_losses:
+            print(f'{name}: read {len(list_losses)} loss values from tensorboard logs '
+                  f'(min {min(list_losses):.6f}, max {max(list_losses):.6f})')
+        else:
+            print(f'[WARNING] {name}: no loss/accuracy/epoch_loss scalars found in tensorboard logs.')
         plt.plot(np.array(list_epochs), 1-np.array(list_losses), label=name, linewidth=2)
 
     # finalise plot

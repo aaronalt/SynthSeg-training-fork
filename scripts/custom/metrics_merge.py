@@ -176,7 +176,25 @@ def _read_tb_scalars(event_files, tags=('epoch_loss', 'loss', 'val_loss')):
     tags, and seen is {tag: count} for ALL scalar tags encountered (for diagnostics)."""
     # same import path as SynthSeg/validate.py (proven to work on the server)
     from tensorflow.python.summary.summary_iterator import summary_iterator
-    from tensorflow.python.framework.tensor_util import make_ndarray
+
+    def tensor_to_float(tensor_proto):
+        """Decode a scalar tensor proto across TF versions."""
+        try:
+            from tensorflow.python.framework.tensor_util import make_ndarray
+            return float(make_ndarray(tensor_proto))
+        except ImportError:
+            pass
+        import tensorflow as tf
+        try:
+            return float(tf.make_ndarray(tensor_proto))
+        except AttributeError:
+            pass
+        # manual fallback: scalar protos store the value in typed repeated fields
+        for field in ('float_val', 'double_val', 'int_val', 'int64_val'):
+            values = getattr(tensor_proto, field)
+            if values:
+                return float(values[0])
+        raise ValueError('could not decode scalar tensor proto')
 
     series = {}
     seen = {}
@@ -192,7 +210,7 @@ def _read_tb_scalars(event_files, tags=('epoch_loss', 'loss', 'val_loss')):
                     if kind == 'simple_value':
                         value = v.simple_value
                     elif kind == 'tensor':
-                        value = float(make_ndarray(v.tensor))
+                        value = tensor_to_float(v.tensor)
                     else:
                         continue
                     series.setdefault(v.tag, []).append((event.step, value))

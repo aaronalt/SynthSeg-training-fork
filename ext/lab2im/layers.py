@@ -11,6 +11,8 @@ This file regroups several custom keras layers used in the generation model:
     - BiasFieldCorruption,
     - IntensityAugmentation,
     - DiceLoss,
+    - HausdorffDTLoss,
+    - HausdorffERLoss,
     - WeightedL2Loss,
     - ResetValuesToZero,
     - ConvertLabels,
@@ -1502,16 +1504,201 @@ class DiceLoss(Layer):
                        lambda: tf.constant(0., 'float32'))
 
     @staticmethod
-    def _edt_maps(gt_array):
+    def _edt_maps(gt_array, margin=16):
         """Per batch element and label: distance to the nearest GT foreground voxel (EDT of the
-        complement of the binary GT mask), normalised by the volume diagonal to ~[0, 1]."""
+        complement of the binary GT mask), normalised by the volume diagonal of the FULL volume to
+        ~[0, 1]. Speed optimisations (GT is freshly deformed every step, so content caching cannot
+        hit):
+        - labels absent from the volume (the large majority of channels in any given crop) are
+          detected in one vectorised pass and skipped entirely; their distance map stays 0, which
+          is also their correct HD95 contribution;
+        - present labels are EDT'ed on their bounding box + margin voxels only, which is orders of
+          magnitude cheaper for small structures. Inside the crop the EDT is exact (the whole label
+          is inside it). Voxels outside the crop are further than the margin from the label and are
+          assigned the margin value: a bounded approximation that is only reached by predictions
+          straying further than the margin from the GT, where the loss is dominated by the Dice
+          term anyway. All values the 95th percentile over boundary-active voxels can realistically
+          see are exact.
+        scipy's distance_transform_edt has no batched mode (it transforms over ALL axes), so the
+        loop over present labels remains, but on small crops."""
         from scipy.ndimage import distance_transform_edt
         dist = np.zeros_like(gt_array, dtype='float32')
         norm = np.linalg.norm(np.array(gt_array.shape[1:-1], dtype='float32'))
         for b in range(gt_array.shape[0]):
-            for c in range(gt_array.shape[-1]):
-                dist[b, ..., c] = distance_transform_edt(gt_array[b, ..., c] <= 0.5) / norm
+            masks = gt_array[b] > 0.5  # (d, h, w, n_labels)
+            for c in np.nonzero(masks.any(axis=(0, 1, 2)))[0]:
+                mask = masks[..., c]
+                # bounding box of the label + margin, clipped to the volume
+                idx = np.where(mask)
+                slices = tuple(slice(max(int(i.min()) - margin, 0),
+                                     min(int(i.max()) + margin + 1, mask.shape[ax]))
+                               for ax, i in enumerate(idx))
+                crop_edt = distance_transform_edt(~mask[slices])
+                channel = np.full(mask.shape, margin, dtype='float32')
+                channel[slices] = crop_edt.astype('float32')
+                dist[b, ..., c] = channel / norm
         return dist
+
+    def compute_output_shape(self, input_shape):
+        return [[]]
+
+
+class HausdorffDTLoss(Layer):
+    """Distance-transform weighted boundary loss for selected foreground labels.
+    Based on Karimi & Salcudean / HausdorffLoss (PyTorch), adapted to Keras/TF:
+        loss = mean( (pred - target)^2 * (pred_dt^alpha + target_dt^alpha) )
+    where pred_dt / target_dt are the Euclidean distance transforms of the
+    binarised prediction and target masks (fg_dist + bg_dist).
+
+    The distance fields are computed on the CPU with scipy via tf.numpy_function,
+    which is safe because they act as fixed spatial weights: gradients flow only
+    through the (pred - target)^2 term. To keep training feasible, this layer
+    computes the loss only for a user-supplied subset of class indices (e.g. the
+    claustrum labels 138/139), not all n_labels channels.
+
+    :param class_indices: list of channel indices (into the last axis) for which
+        to compute the Hausdorff DT loss. Use the positions of 138 and 139 in the
+        sorted segmentation label list.
+    :param alpha: power applied to the distance fields (default 2.0, as in the
+        original HausdorffDTLoss).
+    """
+
+    def __init__(self, class_indices, alpha=2.0, **kwargs):
+        self.class_indices = list(class_indices)
+        self.alpha = float(alpha)
+        super(HausdorffDTLoss, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super().get_config()
+        config['class_indices'] = self.class_indices
+        config['alpha'] = self.alpha
+        return config
+
+    def build(self, input_shape):
+        assert len(input_shape) == 2, 'HausdorffDTLoss expects 2 inputs [gt, pred].'
+        assert input_shape[0] == input_shape[1], 'the two inputs must have the same shape.'
+        self.built = True
+        super(HausdorffDTLoss, self).build(input_shape)
+
+    def call(self, inputs, **kwargs):
+        target = inputs[0]  # one-hot ground truth: (batch, ..., n_labels)
+        pred = inputs[1]    # softmax probabilities: (batch, ..., n_labels)
+
+        # stack the selected binary channels: (batch, ..., n_selected)
+        pred_sel = tf.stack([pred[..., i] for i in self.class_indices], axis=-1)
+        target_sel = tf.stack([target[..., i] for i in self.class_indices], axis=-1)
+
+        # distance fields as constant spatial weights
+        pred_dt = self._distance_field(pred_sel)
+        target_dt = self._distance_field(target_sel)
+
+        pred_error = tf.square(pred_sel - target_sel)
+        distance = tf.pow(pred_dt, self.alpha) + tf.pow(target_dt, self.alpha)
+        loss = tf.reduce_mean(pred_error * distance)
+        return loss
+
+    def _distance_field(self, img):
+        """Compute fg_dist + bg_dist for each channel via scipy EDT on the CPU.
+        img is (batch, d, h, w, n_channels) float probabilities."""
+        def np_field(x):
+            from scipy.ndimage import distance_transform_edt
+            x = x.astype('float32')
+            field = np.zeros_like(x, dtype='float32')
+            for b in range(x.shape[0]):
+                for c in range(x.shape[-1]):
+                    fg = x[b, ..., c] > 0.5
+                    if fg.any():
+                        bg = ~fg
+                        field[b, ..., c] = (
+                            distance_transform_edt(fg).astype('float32') +
+                            distance_transform_edt(bg).astype('float32')
+                        )
+            return field
+
+        field = tf.numpy_function(np_field, [img], tf.float32)
+        field.set_shape(img.get_shape())
+        return field
+
+    def compute_output_shape(self, input_shape):
+        return [[]]
+
+
+class HausdorffERLoss(Layer):
+    """Morphological-erosion Hausdorff boundary loss for selected foreground labels,
+    running entirely on the GPU. Adapted from Karimi & Salcudean / HausdorffLoss
+    (PyTorch), but re-implemented with TensorFlow depthwise convolutions so there
+    is no CPU round-trip and no scipy EDT.
+
+    The loss iteratively erodes the squared prediction error with a 3x3x3 cross
+    kernel, accumulating a weighted erosion map:
+        bound_0 = (pred - target)^2
+        bound_{k+1} = relu(conv(bound_k, kernel) - 0.5), normalised to [0, 1]
+        eroted   = sum_k bound_k * (k + 1)^alpha
+        loss     = mean(eroted)
+
+    Unlike the PyTorch reference, the TensorFlow implementation keeps the graph
+    connected through the iterations so gradients can update the prediction.
+
+    :param class_indices: list of channel indices for which to compute the loss.
+    :param alpha: power weighting for erosion iterations (default 2.0).
+    :param erosions: number of erosion iterations (default 10).
+    """
+
+    def __init__(self, class_indices, alpha=2.0, erosions=10, **kwargs):
+        self.class_indices = list(class_indices)
+        self.alpha = float(alpha)
+        self.erosions = int(erosions)
+        self.kernel = None
+        super(HausdorffERLoss, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({'class_indices': self.class_indices,
+                       'alpha': self.alpha,
+                       'erosions': self.erosions})
+        return config
+
+    def build(self, input_shape):
+        assert len(input_shape) == 2, 'HausdorffERLoss expects 2 inputs [gt, pred].'
+        assert input_shape[0] == input_shape[1], 'the two inputs must have the same shape.'
+        n_dims = len(input_shape[0]) - 2  # spatial dims
+        assert n_dims == 3, 'HausdorffERLoss is implemented for 3D inputs only.'
+        # 3x3x3 cross kernel: face-connected neighbors + center, total weight 7
+        cross = np.array([[[0, 0, 0], [0, 1, 0], [0, 0, 0]],
+                          [[0, 1, 0], [1, 1, 1], [0, 1, 0]],
+                          [[0, 0, 0], [0, 1, 0], [0, 0, 0]]], dtype='float32') / 7.0
+        # shape (3,3,3,1,1) for depthwise_conv3d: [D,H,W,in_channels,channel_multiplier]
+        kernel = np.expand_dims(np.expand_dims(cross, -1), -1)
+        self.kernel = tf.constant(kernel, dtype='float32')
+        self.built = True
+        super(HausdorffERLoss, self).build(input_shape)
+
+    def call(self, inputs, **kwargs):
+        target = inputs[0]
+        pred = inputs[1]
+
+        pred_sel = tf.stack([pred[..., i] for i in self.class_indices], axis=-1)
+        target_sel = tf.stack([target[..., i] for i in self.class_indices], axis=-1)
+
+        bound = tf.square(pred_sel - target_sel)
+        eroted = tf.zeros_like(bound)
+
+        for k in range(self.erosions):
+            # depthwise 3D conv, same padding, one filter per channel
+            dilation = tf.nn.depthwise_conv3d(
+                bound, self.kernel,
+                strides=[1, 1, 1, 1, 1],
+                padding='SAME'
+            )
+            erosion = tf.nn.relu(dilation - 0.5)
+            # normalise to [0, 1] per batch/channel, guarding against flat maps
+            e_min = tf.reduce_min(erosion, axis=[1, 2, 3], keepdims=True)
+            e_max = tf.reduce_max(erosion, axis=[1, 2, 3], keepdims=True)
+            erosion = tf.math.divide_no_nan(erosion - e_min, e_max - e_min)
+            bound = erosion
+            eroted = eroted + erosion * tf.pow(float(k + 1), self.alpha)
+
+        return tf.reduce_mean(eroted)
 
     def compute_output_shape(self, input_shape):
         return [[]]

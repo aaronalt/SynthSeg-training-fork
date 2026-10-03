@@ -2,12 +2,11 @@
 SynthSeg training script for claustrum segmentation
 APPROACH: 80% 7T train, 20% 7T validation 
 #######
-Version: HD95_loss
-Changelog: -Claustrum weighted 10x -removed labels with low LOSO scores (5 subjects) -same labels used as clau_50x model -added compound HD 95 loss to boundary
-Check: -do doundary weights need to be set again (currently at 2 in training_feature_extraction)
+Version: only_quality_labels_clau10x
+Changelog: -Claustrum weighted 10x -removed labels with low LOSO scores (5 subjects) -same labels used as clau_50x model
 #######
 """
-version = 'HD95_loss'
+version = 'only_quality_labels_clau10x'
 
 import os
 import tensorflow as tf
@@ -157,8 +156,8 @@ feat_multiplier = 2
 # Training parameters
 lr = 1e-4
 wl2_epochs = 0  # Skip warmup - using pretrained weights
-dice_epochs = 40
-steps_per_epoch = 500
+dice_epochs = 100
+steps_per_epoch = 10000
 validation_steps = 60  # ~20 validation subjects × 3 modalities = 60 files (1 pass)
 
 # Generation and segmentation labels
@@ -174,7 +173,14 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0.1
+# Boundary loss for selected labels. 'er' = GPU-native erosion-based Hausdorff loss
+# (fast). 'dt' = exact distance-transform version (slow, CPU sync). Use 0.0 weight
+# to train with Dice only. Default is 'er' on the claustrum labels 138/139.
+boundary_loss_weight = 0.1
+boundary_loss_labels = [138, 139]
+boundary_loss_alpha = 2.0
+boundary_loss_type = 'er'
+boundary_loss_erosions = 10
 
 # Shape and resolution
 target_res = 0.50
@@ -256,5 +262,10 @@ training(all_train_paths,
          prior_means=means,
          prior_stds=stds,
          label_weights=label_weights,
-         hd95_weight=hd95_weight
+         hd95_weight=hd95_weight,
+         boundary_loss_weight=boundary_loss_weight,
+         boundary_loss_labels=boundary_loss_labels,
+         boundary_loss_alpha=boundary_loss_alpha,
+         boundary_loss_type=boundary_loss_type,
+         boundary_loss_erosions=boundary_loss_erosions
          )

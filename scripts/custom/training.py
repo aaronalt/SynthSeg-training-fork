@@ -117,7 +117,7 @@ flipping = True
 scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.012
-translation_bounds = 15
+translation_bounds = None
 nonlin_std = 5.0
 bias_field_std = 0.3
 noise_std = 100
@@ -125,7 +125,7 @@ noise_std = 100
 # Acquisition resolution parameters
 randomise_res = True
 max_res_iso = 1.5
-max_res_aniso = 3.0
+max_res_aniso = 2.0
 data_res = None
 thickness = None
 

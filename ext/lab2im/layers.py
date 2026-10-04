@@ -1537,7 +1537,7 @@ class DiceLoss(Layer):
             weights = normalized_weights / (tf.reduce_sum(normalized_weights, -1, keepdims=True) + 1e-8)
             hd95 = tf.reduce_sum(hd95 * weights, -1)
         return tf.math.reduce_mean(hd95)
-
+    '''
     @staticmethod
     def _hd95_single(inputs):
         """95th percentile of w over boundary-active voxels (s > 1e-3; true boundaries have
@@ -1570,7 +1570,7 @@ class DiceLoss(Layer):
 
     def compute_output_shape(self, input_shape):
         return [[]]
-    '''
+    
     
 
 class WeightedL2Loss(Layer):

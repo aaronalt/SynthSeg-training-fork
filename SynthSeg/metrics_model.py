@@ -48,8 +48,8 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None, h
     if metrics == 'dice':
         last_tensor = layers.DiceLoss(
             class_weights=class_weights,
-            boundary_weights=2,      # Extra weight for boundary voxels
-            boundary_dist=2,         # Within 2 voxels of boundary (smaller for thin structures)
+            boundary_weights=5,      # Extra weight for boundary voxels
+            boundary_dist=1,         # Within 2 voxels of boundary (smaller for thin structures)
             skip_background=True,    # Don't weight background boundaries (default)
             hd95_weight=hd95_weight  # Weight of the HD95 boundary term (0 = disabled)
         )([labels_gt, last_tensor])

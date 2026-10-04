@@ -118,7 +118,7 @@ scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.012
 translation_bounds = None
-nonlin_std = 5.0
+nonlin_std = 2.0
 bias_field_std = 0.3
 noise_std = 100
 

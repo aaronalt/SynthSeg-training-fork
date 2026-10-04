@@ -1,9 +1,9 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: m0.66mm_with_diff_warp_params
-Changelog: -0.66mm target_res 
-Check: -compare with 'experiment_20261002_130803_only_quality_labels_0.66mm'
+Version: new.train.val.split.more.warp
+Changelog: -0.50mm target_res 
+Check: -compare with other 0.50mm models (only_quality_labels_clau10x) - this has different train/val splits and more aggressive warping
 #######
 """
 
@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = '0.66mm_with_diff_warp_params'
+version = 'new.train.val.split.more.warp'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -103,7 +103,7 @@ for lbl in [138, 139]:
 hd95_weight = 0.1
 
 # Shape and resolution
-target_res = 0.66
+target_res = 0.50
 output_shape = 192
 n_channels = 1
 
@@ -179,7 +179,7 @@ training(TRAIN,
          steps_per_epoch=steps_per_epoch,
          validation_steps=validation_steps,
          checkpoint=path_checkpoint,
-         val_path=all_val_paths,
+         val_path=VAL,
          skip_pretrain=skip_pretrain,
          finetune=False,
          subjects_prob=None,

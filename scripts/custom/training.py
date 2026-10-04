@@ -52,7 +52,7 @@ split_summary = {
     'val_subjects': sorted(val_subjects),
     'test_subjects': sorted(test_subjects),
 }
-with open(os.path.join(path_model_dir, 'split_summary.json'), 'w') as f:
+with open(os.path.join(path_model_dir, 'split_summary.txt'), 'w') as f:
     json.dump(split_summary, f, indent=2)
 
 if VERBOSE:

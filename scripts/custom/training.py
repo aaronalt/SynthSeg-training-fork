@@ -52,8 +52,7 @@ split_summary = {
     'val_subjects': sorted(val_subjects),
     'test_subjects': sorted(test_subjects),
 }
-with open(os.path.join(path_model_dir, 'split_summary.txt'), 'w') as f:
-    f.write(split_summary)
+
 
 if VERBOSE:
     print("\n" + "="*70)

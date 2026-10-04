@@ -99,7 +99,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0.01
+hd95_weight = 0
 
 # Shape and resolution
 target_res = 0.50
@@ -118,7 +118,7 @@ scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.015
 translation_bounds = 15
-nonlin_std = 2.0
+nonlin_std = 5.0
 bias_field_std = 0.3
 noise_std = 100
 

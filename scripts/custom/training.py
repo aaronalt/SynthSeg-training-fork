@@ -53,7 +53,7 @@ split_summary = {
     'test_subjects': sorted(test_subjects),
 }
 with open(os.path.join(path_model_dir, 'split_summary.txt'), 'w') as f:
-    json.dump(split_summary, f, indent=2)
+    f.write(split_summary)
 
 if VERBOSE:
     print("\n" + "="*70)

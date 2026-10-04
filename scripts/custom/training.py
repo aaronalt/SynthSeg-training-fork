@@ -1,9 +1,9 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: new.train.val.split.more.warp
-Changelog: -0.50mm target_res 
-Check: -compare with other 0.50mm models (only_quality_labels_clau10x) - this has different train/val splits and more aggressive warping
+Version: hd95.01
+Changelog: -HD95 boundary weighted -compare with: new.train.val.split.more.warp 
+Check: 
 #######
 """
 
@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'new.train.val.split.more.warp'
+version = 'hd95.01'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -83,7 +83,7 @@ feat_multiplier = 2
 lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
 dice_epochs = 100
-steps_per_epoch = 10000
+steps_per_epoch = 5000
 validation_steps = 80  
 
 # Generation and segmentation labels
@@ -99,7 +99,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0
+hd95_weight = 0.01
 
 # Shape and resolution
 target_res = 0.50

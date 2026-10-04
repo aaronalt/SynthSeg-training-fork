@@ -116,14 +116,14 @@ path_generation_classes = np.array([0, 1, 2, 3, 4,
 flipping = True
 scaling_bounds = 0.2
 rotation_bounds = 15
-shearing_bounds = 0.012
-translation_bounds = None
+shearing_bounds = 0.015
+translation_bounds = 15
 nonlin_std = 2.0
 bias_field_std = 0.3
 noise_std = 100
 
 # Acquisition resolution parameters
-randomise_res = True
+randomise_res = False
 max_res_iso = 1.5
 max_res_aniso = 2.0
 data_res = None

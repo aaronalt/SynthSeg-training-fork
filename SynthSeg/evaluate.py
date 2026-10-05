@@ -394,7 +394,7 @@ def evaluation(gt_dir,
                 recall_coefs[index, idx] = tp / (np.count_nonzero(mask_gt) + 1e-5)
 
             if gt_labels.shape != seg.shape:
-                ##print('\nShape mismatch at evaluation index {}'.format(idx), flush=True)
+                print('\nShape mismatch at evaluation index {}'.format(idx), flush=True)
                 #print('Ground truth:', path_gt, flush=True)
                 #print('Prediction:', path_seg, flush=True)
                 #print('Ground-truth shape:', gt_labels.shape, flush=True)

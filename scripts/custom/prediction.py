@@ -60,7 +60,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260923_093722_only_quality_labels_clau10x' # /home/althause/data/logs/7t_validation.log
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-# model_files = model_files[19:21]
+model_files = model_files[17:]
 # model_files = model_files[::10]
 # model_files = [f for f in model_files if 'dice_finetune_031' in f]
 # Ground truth directories for evaluation
@@ -253,7 +253,7 @@ for path_model in model_files:
             gt_folder=path_gt,
             evaluation_labels=[138,139],  # claustrum labels
             compute_distances=True,
-            recompute=True)
+            recompute=False)
 
     print("\nPrediction complete!")
 

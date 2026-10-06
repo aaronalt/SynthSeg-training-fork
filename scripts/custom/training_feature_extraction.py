@@ -369,17 +369,16 @@ def train_model(model,
 
     # model saving callback
     save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_type, phase, n_epochs))
-    callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
-
-    # early stopping on validation loss - only when validation data is available
-    if validation_data is not None:
-        callbacks.append(KC.EarlyStopping(monitor='val_loss', patience=15, verbose=1, restore_best_weights=True))
+    # callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
+    callbacks = [
+        KC.ModelCheckpoint(save_file_name, save_weights_only=True, verbose=1),
+        KC.CSVLogger(os.path.join(log_dir, 'training.log')),
+        KC.EarlyStopping(monitor='val_loss', patience=15, verbose=1, restore_best_weights=True),
+        KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch')
+    ]
 
     if extra_callbacks:
         callbacks.extend(extra_callbacks)
-
-    # TensorBoard callback
-    callbacks.append(KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch'))
 
     compile_model = True
     init_epoch = 0

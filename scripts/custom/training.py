@@ -68,7 +68,7 @@ if VERBOSE:
 
 # === MODEL PARAMETERS ===
 # Pre-trained model
-path_checkpoint = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_223317_hd95.01/dice_finetune_005_100.h5' # '/home/althause/data/weights/mauri_unet_weights.h5'
+path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
 batchsize = 1
 
 # Architecture parameters

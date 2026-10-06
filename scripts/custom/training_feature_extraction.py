@@ -44,6 +44,42 @@ from ext.neuron import models as nrn_models
 import threading
 
 
+class HD95WarmupCallback(Callback):
+    def __init__(self, dice_loss_layer, start_epoch=4, warmup_epochs=4, initial_weight=0.0025, target_weight=0.0100):
+        super().__init__()
+        self.dice_loss_layer = dice_loss_layer
+        self.start_epoch = start_epoch  # 0-indexed: 4 = Epoch 5
+        self.warmup_epochs = warmup_epochs  # Ramp length (Epochs 5, 6, 7, 8)
+        self.initial_weight = initial_weight  # Starts at 0.0025
+        self.target_weight = target_weight  # Ends at 0.0100
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch < self.start_epoch:
+            new_weight = 0.0
+        elif self.warmup_epochs > 1:
+            progress = min(1.0, (epoch - self.start_epoch) / float(self.warmup_epochs - 1))
+            new_weight = self.initial_weight + progress * (self.target_weight - self.initial_weight)
+        else:
+            new_weight = self.target_weight
+
+        if self.dice_loss_layer is not None and hasattr(self.dice_loss_layer, 'hd95_weight'):
+            if isinstance(self.dice_loss_layer.hd95_weight, tf.Variable):
+                self.dice_loss_layer.hd95_weight.assign(new_weight)
+            else:
+                tf.keras.backend.set_value(self.dice_loss_layer.hd95_weight, new_weight)
+
+        print(f"\n [HD95 Warmup] Epoch {epoch + 1}: hd95_weight = {new_weight:.6f}")
+
+    def on_epoch_end(self, epoch, logs=None):
+        # Convert tf.Variable to standard float to avoid JSON serialization crash
+        if logs is not None and self.dice_loss_layer is not None and hasattr(self.dice_loss_layer, 'hd95_weight'):
+            val = self.dice_loss_layer.hd95_weight
+            if isinstance(val, tf.Variable):
+                logs['hd95_weight'] = float(val.numpy())
+            else:
+                logs['hd95_weight'] = float(tf.keras.backend.get_value(val))
+
+
 def save_training_params(model_dir, params):
     """Save training parameters to a JSON file in the model directory."""
     param_file = os.path.join(model_dir, 'training_params.json')

@@ -329,8 +329,11 @@ def training(labels_dir,
 
         # Create fresh dice model with unfrozen weights
         dice_model = models.Model(unet_model.inputs, unet_model.outputs)
-        dice_model = metrics.metrics_model(dice_model, segmentation_labels, 'dice',
-                                           class_weights=label_weights, hd95_weight=hd95_weight,
+        dice_model = metrics.metrics_model(dice_model, 
+                                           segmentation_labels, 
+                                           'dice',
+                                           class_weights=label_weights, 
+                                           hd95_weight=hd95_weight,
                                            boundary_loss_weight=boundary_loss_weight,
                                            boundary_loss_labels=boundary_loss_labels,
                                            boundary_loss_alpha=boundary_loss_alpha,

@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'hd95.delay'
+version = 'new.train.val.split.more.warp.restart.from.ep14'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -68,7 +68,7 @@ if VERBOSE:
 
 # === MODEL PARAMETERS ===
 # Pre-trained model
-path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
+path_checkpoint = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_222521_new.train.val.split.more.warp/dice_finetune_014_100.h5' # '/home/althause/data/weights/mauri_unet_weights.h5'
 batchsize = 1
 
 # Architecture parameters
@@ -83,7 +83,7 @@ feat_multiplier = 2
 lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
 dice_epochs = 100
-steps_per_epoch = 1000
+steps_per_epoch = 10000
 validation_steps = 80  
 
 # Generation and segmentation labels

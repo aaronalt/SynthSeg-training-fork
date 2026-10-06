@@ -66,7 +66,7 @@ class HD95WarmupCallback(Callback):
         self.start_epoch = start_epoch
         self.warmup_epochs = warmup_epochs
         self.target_weight = target_weight
-		self.initial_weight = initial_weight
+	    self.initial_weight = initial_weight
 
     def on_epoch_begin(self, epoch, logs=None):
         if epoch < self.start_epoch:
@@ -435,17 +435,17 @@ def train_model(model,
 	# HD95 Warmup Callback
 	dice_loss_layer = None
 	for layer in model.layers:
-    	if "dice_loss" in layer.name.lower():
+        if "dice_loss" in layer.name.lower():
 	        dice_loss_layer = layer
 	        break
 
-	hd95_callback = HD95WarmupCallback(
+    hd95_callback = HD95WarmupCallback(
 	    dice_loss_layer=dice_loss_layer,
 	    start_epoch=5,      # Remains 0.0 for epochs 1–4
 	    warmup_epochs=4,    # Ramps 0.0 -> 0.01 during epochs 5-8
 	    target_weight=0.01   # Reduced weight to preserve Recall
-	)
-	callbacks.append(hd95_callback)
+    )
+    callbacks.append(hd95_callback)
 
 
     # fit

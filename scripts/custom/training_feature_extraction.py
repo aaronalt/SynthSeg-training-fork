@@ -380,7 +380,8 @@ def training(labels_dir,
                     reinitialise_momentum=True,
                     validation_data=val_generator,
                     phase='finetune',
-                    validation_steps=validation_steps)
+                    validation_steps=validation_steps,
+                    hd95_weight=hd95_weight)
 
 
 def train_model(model,
@@ -396,7 +397,8 @@ def train_model(model,
                 validation_data=None,
                 phase=None,
                 resume_epoch=None,
-                validation_steps=100):
+                validation_steps=100,
+                hd95_weight=hd95_weight):
 
     # prepare model and log folders
     utils.mkdir(model_dir)

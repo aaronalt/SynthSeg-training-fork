@@ -44,33 +44,6 @@ from ext.neuron import models as nrn_models
 import threading
 
 
-class HD95WarmupCallback(Callback):
-    def __init__(self, dice_loss_layer, start_epoch=4, warmup_epochs=4, initial_weight=0.0025, target_weight=0.0100):
-        super().__init__()
-        self.dice_loss_layer = dice_loss_layer
-        self.start_epoch = start_epoch        # 0-indexed: 4 = Epoch 5
-        self.warmup_epochs = warmup_epochs    # Ramp length (Epochs 5, 6, 7, 8)
-        self.initial_weight = initial_weight  # Starts at 0.0025
-        self.target_weight = target_weight    # Ends at 0.0100
-
-    def on_epoch_begin(self, epoch, logs=None):
-        if epoch < self.start_epoch:
-            new_weight = 0.0
-        elif self.warmup_epochs > 1:
-            progress = min(1.0, (epoch - self.start_epoch) / float(self.warmup_epochs - 1))
-            new_weight = self.initial_weight + progress * (self.target_weight - self.initial_weight)
-        else:
-            new_weight = self.target_weight
-
-        if hasattr(self.dice_loss_layer, 'hd95_weight'):
-            if isinstance(self.dice_loss_layer.hd95_weight, tf.Variable):
-                self.dice_loss_layer.hd95_weight.assign(new_weight)
-            else:
-                tf.keras.backend.set_value(self.dice_loss_layer.hd95_weight, new_weight)
-                
-        print(f"\n [HD95 Warmup] Epoch {epoch + 1}: hd95_weight = {new_weight:.6f}")
-		
-
 def save_training_params(model_dir, params):
     """Save training parameters to a JSON file in the model directory."""
     param_file = os.path.join(model_dir, 'training_params.json')
@@ -140,7 +113,12 @@ def training(labels_dir,
              finetune=False,
              validation_steps=100,
              label_weights=None,
-             hd95_weight=0.1):
+             hd95_weight=0.0,
+             boundary_loss_weight=0.0,
+             boundary_loss_labels=None,
+             boundary_loss_alpha=2.0,
+             boundary_loss_type='er',
+             boundary_loss_erosions=10):
 
     # check epochs
     assert (wl2_epochs > 0) | (dice_epochs > 0), \
@@ -187,6 +165,11 @@ def training(labels_dir,
         'finetune': finetune,
         'label_weights': label_weights,
         'hd95_weight': hd95_weight,
+        'boundary_loss_weight': boundary_loss_weight,
+        'boundary_loss_labels': boundary_loss_labels,
+        'boundary_loss_alpha': boundary_loss_alpha,
+        'boundary_loss_type': boundary_loss_type,
+        'boundary_loss_erosions': boundary_loss_erosions,
     })
 
     # get label lists
@@ -347,7 +330,12 @@ def training(labels_dir,
         # Create fresh dice model with unfrozen weights
         dice_model = models.Model(unet_model.inputs, unet_model.outputs)
         dice_model = metrics.metrics_model(dice_model, segmentation_labels, 'dice',
-                                           class_weights=label_weights, hd95_weight=hd95_weight)
+                                           class_weights=label_weights, hd95_weight=hd95_weight,
+                                           boundary_loss_weight=boundary_loss_weight,
+                                           boundary_loss_labels=boundary_loss_labels,
+                                           boundary_loss_alpha=boundary_loss_alpha,
+                                           boundary_loss_type=boundary_loss_type,
+                                           boundary_loss_erosions=boundary_loss_erosions)
 
         # Use lower learning rate for finetuning
         finetune_lr = lr / 10
@@ -371,9 +359,9 @@ def train_model(model,
                 path_checkpoint=None,
                 reinitialise_momentum=False,
                 extra_callbacks=None,
-		        validation_data=None,
+                validation_data=None,
                 phase=None,
-		        resume_epoch=None,
+                resume_epoch=None,
                 validation_steps=100):
 
     # prepare model and log folders
@@ -415,27 +403,11 @@ def train_model(model,
             optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
             loss=metrics.IdentityLoss().loss)
 
-	# HD95 Warmup Callback
-	dice_loss_layer = None
-	for layer in model.layers:
-        if "dice_loss" in layer.name.lower():
-	        dice_loss_layer = layer
-	        break
-
-    hd95_callback = HD95WarmupCallback(
-	    dice_loss_layer=dice_loss_layer,
-	    start_epoch=5,      # Remains 0.0 for epochs 1–4
-	    warmup_epochs=4,    # Ramps 0.0 -> 0.01 during epochs 5-8
-	    target_weight=0.01   # Reduced weight to preserve Recall
-    )
-    callbacks.append(hd95_callback)
-
-
     # fit
     model.fit(generator,
                         epochs=n_epochs,
                         steps_per_epoch=n_steps,
                         callbacks=callbacks,
                         initial_epoch=init_epoch,
-			validation_data=validation_data,
-			validation_steps=validation_steps)
+            validation_data=validation_data,
+            validation_steps=validation_steps)

@@ -398,7 +398,7 @@ def train_model(model,
                 phase=None,
                 resume_epoch=None,
                 validation_steps=100,
-                hd95_weight=hd95_weight):
+                hd95_weight=0.0):
 
     # prepare model and log folders
     utils.mkdir(model_dir)
@@ -419,11 +419,17 @@ def train_model(model,
         callbacks.extend(extra_callbacks)
 
     if hd95_weight > 0:
+        # Look up the dice loss layer from the compiled model by name
+        try:
+            dice_loss_layer = model.get_layer('dice_loss')
+        except ValueError:
+            dice_loss_layer = None
+
         hd95_callback = HD95WarmupCallback(
             dice_loss_layer=dice_loss_layer,
-            start_epoch=5,      # 0-indexed: 4 = Epoch 5
-            warmup_epochs=5,    # Ramps 0.0 -> 0.01 during epochs 5-8
-            target_weight=hd95_weight # Target weight
+            start_epoch=5,
+            warmup_epochs=5,
+            target_weight=hd95_weight
         )
         callbacks.append(hd95_callback)
 

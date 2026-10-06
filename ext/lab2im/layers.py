@@ -1339,7 +1339,7 @@ class DiceLoss(Layer):
         self.boundary_dist = boundary_dist
         self.skip_background = skip_background
         self.enable_checks = enable_checks
-        self.hd95_weight = hd95_weight
+        self.hd95_weight = tf.Variable(hd95_weight, dtype=tf.float32, trainable=False)
         self.spatial_axes = None
         self.avg_pooling_layer = None
         self.max_pooling_layer = None

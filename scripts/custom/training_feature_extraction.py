@@ -421,19 +421,14 @@ def train_model(model,
             optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
             loss=metrics.IdentityLoss().loss)
 
-    # HD95 Warmup Callback (only attached when a dice_loss layer exists)
-    dice_loss_layer = None
-    for layer in model.layers:
-        if "dice_loss" in layer.name.lower():
-            dice_loss_layer = layer
-            break
+    # HD95 Warmup Callback
 
-    if dice_loss_layer is not None:
+    if hd95_weight > 0:
         hd95_callback = HD95WarmupCallback(
             dice_loss_layer=dice_loss_layer,
-            start_epoch=4,      # 0-indexed: 4 = Epoch 5
-            warmup_epochs=4,    # Ramps 0.0 -> 0.01 during epochs 5-8
-            target_weight=0.01  # Target weight
+            start_epoch=5,      # 0-indexed: 4 = Epoch 5
+            warmup_epochs=5,    # Ramps 0.0 -> 0.01 during epochs 5-8
+            target_weight=hd95_weight # Target weight
         )
         callbacks.append(hd95_callback)
 

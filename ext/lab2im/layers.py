@@ -1427,7 +1427,7 @@ class DiceLoss(Layer):
         loss = tf.math.reduce_mean(loss)
 
         # add HD95 boundary term
-        if self.hd95_weight:
+        if self.hd95_weight > 0:
             loss = loss + self.hd95_weight * self._hd95_loss(gt, pred, normalized_weights)
 
         return loss

@@ -62,14 +62,23 @@ class HD95WarmupCallback(Callback):
         else:
             new_weight = self.target_weight
 
-        if hasattr(self.dice_loss_layer, 'hd95_weight'):
+        if self.dice_loss_layer is not None and hasattr(self.dice_loss_layer, 'hd95_weight'):
             if isinstance(self.dice_loss_layer.hd95_weight, tf.Variable):
                 self.dice_loss_layer.hd95_weight.assign(new_weight)
             else:
                 tf.keras.backend.set_value(self.dice_loss_layer.hd95_weight, new_weight)
                 
         print(f"\n [HD95 Warmup] Epoch {epoch + 1}: hd95_weight = {new_weight:.6f}")
-		
+
+    def on_epoch_end(self, epoch, logs=None):
+        # Convert tf.Variable to standard float to avoid JSON serialization crash
+        if logs is not None and self.dice_loss_layer is not None and hasattr(self.dice_loss_layer, 'hd95_weight'):
+            val = self.dice_loss_layer.hd95_weight
+            if isinstance(val, tf.Variable):
+                logs['hd95_weight'] = float(val.numpy())
+            else:
+                logs['hd95_weight'] = float(tf.keras.backend.get_value(val))
+
 
 def save_training_params(model_dir, params):
     """Save training parameters to a JSON file in the model directory."""
@@ -234,37 +243,37 @@ def training(labels_dir,
     # Only create validation generator if val_path is provided
     if val_path is not None:
         val_brain_generator = BrainGenerator(labels_dir=val_path,
-                                     generation_labels=generation_labels,
-                                     n_neutral_labels=n_neutral_labels,
-                                     output_labels=segmentation_labels,
-                                     subjects_prob=val_subjects_prob,
-                                     batchsize=batchsize,
-                                     n_channels=n_channels,
-                                     target_res=target_res,
-                                     output_shape=output_shape,
-                                     output_div_by_n=2 ** n_levels,
-                                     generation_classes=generation_classes,
-                                     prior_distributions=prior_distributions,
-                                     prior_means=prior_means,
-                                     prior_stds=prior_stds,
-                                     use_specific_stats_for_channel=use_specific_stats_for_channel,
-                                     mix_prior_and_random=mix_prior_and_random,
-                                     flipping=flipping,
-                                     scaling_bounds=scaling_bounds,
-                                     rotation_bounds=rotation_bounds,
-                                     shearing_bounds=shearing_bounds,
-                                     translation_bounds=translation_bounds,
-                                     nonlin_std=nonlin_std,
-                                     nonlin_scale=nonlin_scale,
-                                     randomise_res=randomise_res,
-                                     max_res_iso=max_res_iso,
-                                     max_res_aniso=max_res_aniso,
-                                     data_res=data_res,
-                                     thickness=thickness,
-                                     bias_field_std=bias_field_std,
-                                     bias_scale=bias_scale,
-                                     noise_std=noise_std,
-                                     return_gradients=return_gradients)
+                                             generation_labels=generation_labels,
+                                             n_neutral_labels=n_neutral_labels,
+                                             output_labels=segmentation_labels,
+                                             subjects_prob=val_subjects_prob,
+                                             batchsize=batchsize,
+                                             n_channels=n_channels,
+                                             target_res=target_res,
+                                             output_shape=output_shape,
+                                             output_div_by_n=2 ** n_levels,
+                                             generation_classes=generation_classes,
+                                             prior_distributions=prior_distributions,
+                                             prior_means=prior_means,
+                                             prior_stds=prior_stds,
+                                             use_specific_stats_for_channel=use_specific_stats_for_channel,
+                                             mix_prior_and_random=mix_prior_and_random,
+                                             flipping=flipping,
+                                             scaling_bounds=scaling_bounds,
+                                             rotation_bounds=rotation_bounds,
+                                             shearing_bounds=shearing_bounds,
+                                             translation_bounds=translation_bounds,
+                                             nonlin_std=nonlin_std,
+                                             nonlin_scale=nonlin_scale,
+                                             randomise_res=randomise_res,
+                                             max_res_iso=max_res_iso,
+                                             max_res_aniso=max_res_aniso,
+                                             data_res=data_res,
+                                             thickness=thickness,
+                                             bias_field_std=bias_field_std,
+                                             bias_scale=bias_scale,
+                                             noise_std=noise_std,
+                                             return_gradients=return_gradients)
     else:
         val_brain_generator = None
         validation_steps = 0  # No validation if no val_path
@@ -301,11 +310,8 @@ def training(labels_dir,
 
         # Freeze encoder layers (down arm), keep decoder trainable
         for layer in unet_model.layers:
-            # Freeze layers that are part of the encoder (down path)
-            # Patterns: unet_conv_downarm_*, unet_maxpool_*, unet_bn_down_*
             if '_downarm_' in layer.name or '_maxpool_' in layer.name or '_bn_down_' in layer.name:
                 layer.trainable = False
-            # Keep BatchNorm frozen regardless
             elif isinstance(layer, tf.keras.layers.BatchNormalization):
                 layer.trainable = False
             else:
@@ -371,9 +377,9 @@ def train_model(model,
                 path_checkpoint=None,
                 reinitialise_momentum=False,
                 extra_callbacks=None,
-		        validation_data=None,
+                validation_data=None,
                 phase=None,
-		        resume_epoch=None,
+                resume_epoch=None,
                 validation_steps=100):
 
     # prepare model and log folders
@@ -399,7 +405,7 @@ def train_model(model,
     init_epoch = 0
     if path_checkpoint is not None:
         if resume_epoch:
-            init_epoch =  resume_epoch
+            init_epoch = resume_epoch
         if (not reinitialise_momentum) & (metric_type in path_checkpoint):
             custom_l2i = {key: value for (key, value) in getmembers(layers, isclass) if key != 'Layer'}
             custom_nrn = {key: value for (key, value) in getmembers(nrn_layers, isclass) if key != 'Layer'}
@@ -415,27 +421,27 @@ def train_model(model,
             optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
             loss=metrics.IdentityLoss().loss)
 
-	# HD95 Warmup Callback
-	dice_loss_layer = None
-	for layer in model.layers:
+    # HD95 Warmup Callback (only attached when a dice_loss layer exists)
+    dice_loss_layer = None
+    for layer in model.layers:
         if "dice_loss" in layer.name.lower():
-	        dice_loss_layer = layer
-	        break
+            dice_loss_layer = layer
+            break
 
-    hd95_callback = HD95WarmupCallback(
-	    dice_loss_layer=dice_loss_layer,
-	    start_epoch=5,      # Remains 0.0 for epochs 1–4
-	    warmup_epochs=4,    # Ramps 0.0 -> 0.01 during epochs 5-8
-	    target_weight=0.01   # Reduced weight to preserve Recall
-    )
-    callbacks.append(hd95_callback)
-
+    if dice_loss_layer is not None:
+        hd95_callback = HD95WarmupCallback(
+            dice_loss_layer=dice_loss_layer,
+            start_epoch=4,      # 0-indexed: 4 = Epoch 5
+            warmup_epochs=4,    # Ramps 0.0 -> 0.01 during epochs 5-8
+            target_weight=0.01  # Target weight
+        )
+        callbacks.append(hd95_callback)
 
     # fit
     model.fit(generator,
-                        epochs=n_epochs,
-                        steps_per_epoch=n_steps,
-                        callbacks=callbacks,
-                        initial_epoch=init_epoch,
-			validation_data=validation_data,
-			validation_steps=validation_steps)
+              epochs=n_epochs,
+              steps_per_epoch=n_steps,
+              callbacks=callbacks,
+              initial_epoch=init_epoch,
+              validation_data=validation_data,
+              validation_steps=validation_steps)

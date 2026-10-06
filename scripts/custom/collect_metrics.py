@@ -1,58 +1,38 @@
-"""
-Collect evaluation metrics (.npy: dice, hausdorff, hausdorff_95/99, mean_distance) into
-metrics.csv (wide) and metrics_tidy.csv (long) WITHOUT re-running prediction or evaluation.
-
-Usage:
-    python collect_metrics.py [--models MODEL_DIR] [path ...]
-
-Each path argument can be:
-  - a checkpoint seg folder containing .npy files (processed directly), or
-  - a parent folder, which is swept recursively for subfolders containing .npy files
-    (e.g. /home/althause/data/seg/<experiment> sweeps all its checkpoint folders).
-With no path arguments, sweeps the default segmentation root /home/althause/data/seg.
-
---models MODEL_DIR additionally plots training/validation loss curves from the
-TensorBoard event files under MODEL_DIR (e.g. the experiment's model folder containing
-logs/train and logs/validation) and writes loss_curves.png there.
-
-If segmentations were deleted (DELETE_TMP_PREDICTIONS=True), subject columns fall back to
-subject_0..N (the .npy files alone don't record file names).
-"""
+#!/usr/bin/env python3
 import os
 import sys
+import argparse
 from pathlib import Path
-import numpy as np
 import pandas as pd
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from metrics_merge import merge_metrics_npy, summarize_per_epoch, plot_loss_curves
-
-DEFAULT_SEG_ROOT = '/home/althause/data/seg'
-
-
-def find_seg_folders(path):
-    """Return [path] if it directly contains .npy files, else its subfolders that do."""
-    path = Path(path)
-    if list(path.glob('*.npy')):
-        return [path]
-    return sorted(d for d in path.rglob('*') if d.is_dir() and list(d.glob('*.npy')))
+import numpy as np
 
 
 def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
+    """
+    Reads 'metrics.csv' from each specified folder, ignores non-metric columns 
+    (like subject IDs or label numbers), filters out HD95 outliers/artifacts,
+    and writes a cleaned summary CSV.
+    """
     epoch_rows = []
+    
+    # Non-metric metadata columns to explicitly exclude from summary calculations
+    IGNORE_COLS = {'subject', 'label', 'structure', 'id', 'unnamed: 0'}
 
     for folder in folders:
         folder = Path(folder)
         csv_path = folder / 'metrics.csv'
+        
         if not csv_path.exists():
+            print(f"Warning: {csv_path} not found. Skipping.")
             continue
 
         df = pd.read_csv(csv_path)
-        
-        # 1. Exclude label/structure/subject ID columns from numeric metric calculations
-        ignore_cols = {'subject', 'label', 'structure', 'id', 'Unnamed: 0'}
-        numeric_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c.lower() not in ignore_cols]
+
+        # Select numeric metric columns while excluding non-metric identifier columns
+        numeric_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns 
+            if c.lower().strip() not in IGNORE_COLS
+        ]
 
         row_dict = {
             'folder': folder.name,
@@ -62,22 +42,39 @@ def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
         for col in numeric_cols:
             series = df[col].copy()
 
-            # 2. Filter out unhandled bounding-box distances (> 30mm)
-            if any(hd_key in col.lower() for hd_key in ['hd', 'hausdorff', 'distance']):
+            # --- FILTERING RULE: Handle HD95/Distance Metrics ---
+            is_distance_col = any(hd_key in col.lower() for hd_key in ['hd', 'hausdorff', 'distance'])
+            
+            if is_distance_col:
+                # 1. Look for a matching Dice column to drop distances where Dice == 0 (undetected)
+                col_suffix = col.replace('hd95', '').replace('hausdorff_95', '').replace('mean_distance', '')
+                matching_dice_cols = [
+                    c for c in numeric_cols 
+                    if 'dice' in c.lower() and (col_suffix in c or col_suffix == '')
+                ]
+
+                if matching_dice_cols:
+                    dice_series = df[matching_dice_cols[0]]
+                    series = series[dice_series > 0.0]
+
+                # 2. Hard threshold cutoff: remove distance artifacts > 30mm (inter-hemispheric / bbox max)
                 series = series[series <= hd_threshold]
 
+            # Drop NaNs after filtering
             series = series.dropna()
 
             if series.empty:
                 continue
 
+            # Compute Summary Statistics
             mean_val = series.mean()
-            std_val = series.std(ddof=1)
+            std_val = series.std(ddof=1) if len(series) > 1 else 0.0
             median_val = series.median()
             q25_val = series.quantile(0.25)
             q75_val = series.quantile(0.75)
             iqr_val = q75_val - q25_val
 
+            # Store in output dictionary
             row_dict[f'{col}_mean'] = mean_val
             row_dict[f'{col}_std'] = std_val
             row_dict[f'{col}_median'] = median_val
@@ -89,41 +86,36 @@ def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
         epoch_rows.append(row_dict)
 
     if not epoch_rows:
+        print("No valid metric files found to summarize.")
         return None
 
     summary_df = pd.DataFrame(epoch_rows)
-    out_dir = out_dir or (os.path.commonpath([str(f) for f in folders]) if len(folders) > 1 else str(folders[0]))
+
+    # Determine output path
+    if out_dir is None:
+        if len(folders) > 1:
+            try:
+                out_dir = os.path.commonpath([str(Path(f).resolve()) for f in folders])
+            except ValueError:
+                out_dir = str(Path(folders[0]).resolve().parent)
+        else:
+            out_dir = str(Path(folders[0]).resolve())
+
     out_path = Path(out_dir) / 'metrics_summary_stats.csv'
     summary_df.to_csv(out_path, index=False)
-    print(f'\nWrote cleaned summary stats to: {out_path}')
+    print(f"\nWrote cleaned per-epoch summary stats to:\n  {out_path}")
     return out_path
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Collect and summarize medical segmentation metrics.")
+    parser.add_argument('folders', nargs='+', help="List of run/epoch folders containing 'metrics.csv'")
+    parser.add_argument('--out_dir', type=str, default=None, help="Directory to save 'metrics_summary_stats.csv'")
+    parser.add_argument('--hd_threshold', type=float, default=30.0, help="Maximum allowed HD95 value in mm (default: 30.0)")
+
+    args = parser.parse_args()
+    compute_extended_summary(args.folders, out_dir=args.out_dir, hd_threshold=args.hd_threshold)
+
+
 if __name__ == '__main__':
-    argv = sys.argv[1:]
-    models_dir = None
-    if '--models' in argv:
-        i = argv.index('--models')
-        models_dir = argv[i + 1]
-        del argv[i:i + 2]
-    args = argv or [DEFAULT_SEG_ROOT]
-    n_written = 0
-    loss_plotted = False
-    for arg in args:
-        folders = find_seg_folders(arg)
-        if not folders:
-            print(f'No .npy files found under {arg}')
-        for folder in folders:
-            print(f'\n=== {folder} ===')
-            csv_path, _ = merge_metrics_npy(folder)
-            n_written += csv_path is not None
-        if folders:
-            summarize_per_epoch(folders)
-            compute_extended_summary(folders)
-            if models_dir and not loss_plotted:
-                plot_loss_curves(models_dir,
-                                 out_dir=os.path.commonpath([str(f) for f in folders]))
-                loss_plotted = True
-    if models_dir and not loss_plotted:
-        plot_loss_curves(models_dir)
-    print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')
+    main()

@@ -59,9 +59,10 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_203703' # /home/althause/data/logs/10000_steps_minus_bad_labels.log
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261002_130803_only_quality_labels_0.66mm' # /home/althause/data/logs/7t_validation.log
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_223317_hd95.01'
+# model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_223317_hd95.01'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_222521_new.train.val.split.more.warp'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[6:]
+model_files = model_files[7:]
 
 # Ground truth directories for evaluation
 gt_dirs = {

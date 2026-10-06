@@ -1,8 +1,8 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: hd95.01
-Changelog: -HD95 boundary weighted -compare with: new.train.val.split.more.warp 
+Version: hd95.delay
+Changelog: -HD95 boundary weighted, but not initiated until epoch -compare with: new.train.val.split.more.warp 
 Check: 
 #######
 """
@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'hd95.01'
+version = 'hd95.delay'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -99,7 +99,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0.01
+hd95_weight = 0
 
 # Shape and resolution
 target_res = 0.50

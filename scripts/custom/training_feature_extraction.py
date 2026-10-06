@@ -44,6 +44,50 @@ from ext.neuron import models as nrn_models
 import threading
 
 
+class HD95WarmupCallback(Callback):
+    """
+    Keras Callback to warm up HD95 boundary loss weight.
+    
+    Parameters:
+    -----------
+    dice_loss_layer : tf.keras.layers.Layer
+        Reference to the custom DiceLoss layer instance in your model.
+    start_epoch : int
+        Epoch index (0-indexed) when HD95 loss begins (e.g., 15 = Epoch 16).
+    warmup_epochs : int
+        Number of epochs over which to linearly ramp up to target_weight.
+        If 0, steps instantly to target_weight at start_epoch.
+    target_weight : float
+        Final weight for HD95 loss (e.g., 0.01).
+    """
+    def __init__(self, dice_loss_layer, start_epoch=15, warmup_epochs=10, target_weight=0.01, initial_weight=0.0025):
+        super().__init__()
+        self.dice_loss_layer = dice_loss_layer
+        self.start_epoch = start_epoch
+        self.warmup_epochs = warmup_epochs
+        self.target_weight = target_weight
+		self.initial_weight = initial_weight
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch < self.start_epoch:
+            new_weight = 0.0
+        elif self.warmup_epochs > 0:
+            # Linear ramp: 0.0 at start_epoch -> target_weight over warmup_epochs
+            progress = min(1.0, (epoch - self.start_epoch) / float(self.warmup_epochs))
+            new_weight = self.initial_weight + progress * (self.target_weight - self.initial_weight)
+        else:
+            new_weight = self.target_weight
+
+        # Assign updated weight to layer variable
+        if hasattr(self.dice_loss_layer, 'hd95_weight'):
+            if isinstance(self.dice_loss_layer.hd95_weight, tf.Variable):
+                self.dice_loss_layer.hd95_weight.assign(new_weight)
+            else:
+                tf.keras.backend.set_value(self.dice_loss_layer.hd95_weight, new_weight)
+                
+        print(f"\n [HD95 Warmup] Epoch {epoch + 1}: hd95_weight = {new_weight:.6f}")
+		
+
 def save_training_params(model_dir, params):
     """Save training parameters to a JSON file in the model directory."""
     param_file = os.path.join(model_dir, 'training_params.json')
@@ -387,6 +431,22 @@ def train_model(model,
         model.compile(
             optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
             loss=metrics.IdentityLoss().loss)
+
+	# HD95 Warmup Callback
+	dice_loss_layer = None
+	for layer in model.layers:
+    	if "dice_loss" in layer.name.lower():
+	        dice_loss_layer = layer
+	        break
+
+	hd95_callback = HD95WarmupCallback(
+	    dice_loss_layer=dice_loss_layer,
+	    start_epoch=5,      # Remains 0.0 for epochs 1–4
+	    warmup_epochs=4,    # Ramps 0.0 -> 0.01 during epochs 5-8
+	    target_weight=0.01   # Reduced weight to preserve Recall
+	)
+	callbacks.append(hd95_callback)
+
 
     # fit
     model.fit(generator,

@@ -1426,9 +1426,17 @@ class DiceLoss(Layer):
             loss = tf.reduce_sum(loss * normalized_weights, -1)
         loss = tf.math.reduce_mean(loss)
 
-        # add HD95 boundary term
-        if self.hd95_weight > 0:
-            loss = loss + self.hd95_weight * self._hd95_loss(gt, pred, normalized_weights)
+        # Guard HD95 calculation with lazy tf.cond to bypass tf.numpy_function when weight is 0
+        if hasattr(self, 'hd95_weight') and self.hd95_weight is not None:
+            # Check if hd95_weight is a Tensor/Variable or standard Python float
+            is_gt_zero = tf.greater(self.hd95_weight, 0.0) if tf.is_tensor(self.hd95_weight) else (self.hd95_weight > 0)
+            
+            hd95_loss_val = tf.cond(
+                tf.cast(is_gt_zero, tf.bool),
+                lambda: self._hd95_loss(gt, pred, normalized_weights),  # ONLY executed when weight > 0
+                lambda: tf.constant(0.0, dtype=tf.float32)              # Executed when weight == 0
+            )
+            loss = loss + self.hd95_weight * hd95_loss_val
 
         return loss
 

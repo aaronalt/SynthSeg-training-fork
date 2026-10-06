@@ -83,7 +83,7 @@ feat_multiplier = 2
 lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
 dice_epochs = 100
-steps_per_epoch = 5000
+steps_per_epoch = 1000
 validation_steps = 80  
 
 # Generation and segmentation labels

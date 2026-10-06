@@ -1,8 +1,8 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: train.val.split.more.warp.1000ep
-Changelog: -1000 epochs
+Version: hd95.warmup
+Changelog: -1000 epochs -same train set as experiment_20261004_222521_new.train.val.split.more.warp
 Check: 
 #######
 """
@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'train.val.split.more.warp.1000ep'
+version = 'hd95.warmup'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"

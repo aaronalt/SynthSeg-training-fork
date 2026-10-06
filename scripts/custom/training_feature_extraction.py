@@ -333,11 +333,7 @@ def training(labels_dir,
                                            segmentation_labels, 
                                            'dice',
                                            class_weights=label_weights, 
-                                           hd95_weight=hd95_weight,
-                                           boundary_loss_labels=boundary_loss_labels,
-                                           boundary_loss_alpha=boundary_loss_alpha,
-                                           boundary_loss_type=boundary_loss_type,
-                                           boundary_loss_erosions=boundary_loss_erosions)
+                                           hd95_weight=hd95_weight)
 
         # Use lower learning rate for finetuning
         finetune_lr = lr / 10

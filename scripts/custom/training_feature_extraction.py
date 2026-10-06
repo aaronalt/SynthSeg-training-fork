@@ -45,40 +45,23 @@ import threading
 
 
 class HD95WarmupCallback(Callback):
-    """
-    Keras Callback to warm up HD95 boundary loss weight.
-    
-    Parameters:
-    -----------
-    dice_loss_layer : tf.keras.layers.Layer
-        Reference to the custom DiceLoss layer instance in your model.
-    start_epoch : int
-        Epoch index (0-indexed) when HD95 loss begins (e.g., 15 = Epoch 16).
-    warmup_epochs : int
-        Number of epochs over which to linearly ramp up to target_weight.
-        If 0, steps instantly to target_weight at start_epoch.
-    target_weight : float
-        Final weight for HD95 loss (e.g., 0.01).
-    """
-    def __init__(self, dice_loss_layer, start_epoch=15, warmup_epochs=10, target_weight=0.01, initial_weight=0.0025):
+    def __init__(self, dice_loss_layer, start_epoch=4, warmup_epochs=4, initial_weight=0.0025, target_weight=0.0100):
         super().__init__()
         self.dice_loss_layer = dice_loss_layer
-        self.start_epoch = start_epoch
-        self.warmup_epochs = warmup_epochs
-        self.target_weight = target_weight
-	    self.initial_weight = initial_weight
+        self.start_epoch = start_epoch        # 0-indexed: 4 = Epoch 5
+        self.warmup_epochs = warmup_epochs    # Ramp length (Epochs 5, 6, 7, 8)
+        self.initial_weight = initial_weight  # Starts at 0.0025
+        self.target_weight = target_weight    # Ends at 0.0100
 
     def on_epoch_begin(self, epoch, logs=None):
         if epoch < self.start_epoch:
             new_weight = 0.0
-        elif self.warmup_epochs > 0:
-            # Linear ramp: 0.0 at start_epoch -> target_weight over warmup_epochs
-            progress = min(1.0, (epoch - self.start_epoch) / float(self.warmup_epochs))
+        elif self.warmup_epochs > 1:
+            progress = min(1.0, (epoch - self.start_epoch) / float(self.warmup_epochs - 1))
             new_weight = self.initial_weight + progress * (self.target_weight - self.initial_weight)
         else:
             new_weight = self.target_weight
 
-        # Assign updated weight to layer variable
         if hasattr(self.dice_loss_layer, 'hd95_weight'):
             if isinstance(self.dice_loss_layer.hd95_weight, tf.Variable):
                 self.dice_loss_layer.hd95_weight.assign(new_weight)

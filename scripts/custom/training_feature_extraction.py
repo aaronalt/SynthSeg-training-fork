@@ -416,6 +416,15 @@ def train_model(model,
     if extra_callbacks:
         callbacks.extend(extra_callbacks)
 
+    if hd95_weight > 0:
+        hd95_callback = HD95WarmupCallback(
+            dice_loss_layer=dice_loss_layer,
+            start_epoch=5,      # 0-indexed: 4 = Epoch 5
+            warmup_epochs=5,    # Ramps 0.0 -> 0.01 during epochs 5-8
+            target_weight=hd95_weight # Target weight
+        )
+        callbacks.append(hd95_callback)
+
     compile_model = True
     init_epoch = 0
     if path_checkpoint is not None:

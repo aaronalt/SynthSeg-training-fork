@@ -39,9 +39,12 @@ def find_seg_folders(path):
     return sorted(d for d in path.rglob('*') if d.is_dir() and list(d.glob('*.npy')))
 
 
-def compute_extended_summary(folders, out_dir=None):
-    """Computes mean, std, median, Q25, Q75, and IQR across subjects for all metrics in each folder."""
-    summary_rows = []
+def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
+    """
+    Computes summary stats per epoch while filtering out invalid distance metrics
+    (e.g., HD95 > 30mm or HD95 on empty predictions where Dice == 0).
+    """
+    epoch_rows = []
 
     for folder in folders:
         folder = Path(folder)
@@ -50,46 +53,66 @@ def compute_extended_summary(folders, out_dir=None):
             continue
 
         df = pd.read_csv(csv_path)
-        # Exclude non-numeric subject identifiers
         numeric_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c != 'subject']
 
+        row_dict = {
+            'folder': folder.name,
+            'path': str(folder)
+        }
+
+        # Identify corresponding dice columns to filter HD metrics cleanly
         for col in numeric_cols:
-            series = df[col].dropna()
+            series = df[col].copy()
+
+            # --- FILTERING RULE 1: Filter out HD/Distance artifacts ---
+            if any(hd_key in col.lower() for hd_key in ['hd', 'hausdorff', 'distance']):
+                # Find matching dice column if available (e.g. 'dice_left' for 'hd95_left')
+                suffix = col.replace('hd95', '').replace('hausdorff_95', '').replace('mean_distance', '')
+                matching_dice_col = [c for c in numeric_cols if 'dice' in c.lower() and suffix in c]
+
+                if matching_dice_col:
+                    dice_series = df[matching_dice_col[0]]
+                    # Mask out HD values where Dice is 0 (undetected)
+                    series = series[dice_series > 0.0]
+
+                # Filter out physically impossible inter-hemispheric jumps (> 30mm)
+                series = series[series <= hd_threshold]
+
+            # Drop NaNs after filtering
+            series = series.dropna()
+
             if series.empty:
                 continue
 
             mean_val = series.mean()
-            std_val = series.std(ddof=1)  # Sample standard deviation
+            std_val = series.std(ddof=1)
             median_val = series.median()
             q25_val = series.quantile(0.25)
             q75_val = series.quantile(0.75)
             iqr_val = q75_val - q25_val
 
-            summary_rows.append({
-                'folder': folder.name,
-                'path': str(folder),
-                'metric': col,
-                'mean': mean_val,
-                'std': std_val,
-                'median': median_val,
-                'q25': q25_val,
-                'q75': q75_val,
-                'iqr': iqr_val,
-                'mean_std_str': f"{mean_val:.4f} ± {std_val:.4f}",
-                'median_iqr_str': f"{median_val:.4f} [{q25_val:.4f}, {q75_val:.4f}]"
-            })
+            # Record stats
+            row_dict[f'{col}_mean'] = mean_val
+            row_dict[f'{col}_std'] = std_val
+            row_dict[f'{col}_median'] = median_val
+            row_dict[f'{col}_iqr'] = iqr_val
+            row_dict[f'{col}_n_valid'] = len(series)  # Number of valid subjects evaluated
+            row_dict[f'{col}_mean_std_str'] = f"{mean_val:.4f} ± {std_val:.4f}"
+            row_dict[f'{col}_median_iqr_str'] = f"{median_val:.4f} [{q25_val:.4f}, {q75_val:.4f}]"
 
-    if not summary_rows:
+        epoch_rows.append(row_dict)
+
+    if not epoch_rows:
         return None
 
-    summary_df = pd.DataFrame(summary_rows)
+    summary_df = pd.DataFrame(epoch_rows)
 
     if out_dir is None:
         out_dir = os.path.commonpath([str(f) for f in folders]) if len(folders) > 1 else str(folders[0])
 
     out_path = Path(out_dir) / 'metrics_summary_stats.csv'
     summary_df.to_csv(out_path, index=False)
-    print(f'\nWrote extended statistical summary to: {out_path}')
+    print(f'\nWrote cleaned per-epoch summary stats to: {out_path}')
     return out_path
 
 

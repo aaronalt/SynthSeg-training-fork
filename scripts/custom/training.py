@@ -38,8 +38,8 @@ log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
 # Train, val, test sets
-TRAIN = Path('/home/althause/data/TRAIN')
-VAL = Path('/home/althause/data/VAL')
+TRAIN = Path('/home/althause/data/TRAIN/CAT')
+VAL = Path('/home/althause/data/VAL/CAT')
 TEST = Path('/home/althause/data/TEST')
 train_subjects = sorted(TRAIN.iterdir())
 val_subjects = sorted(VAL.iterdir())

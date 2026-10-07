@@ -427,8 +427,9 @@ def train_model(model,
 
         hd95_callback = HD95WarmupCallback(
             dice_loss_layer=dice_loss_layer,
-            start_epoch=5,
-            warmup_epochs=5,
+            start_epoch=10,
+            warmup_epochs=10,
+            initial_weight=0.001,
             target_weight=hd95_weight
         )
         callbacks.append(hd95_callback)

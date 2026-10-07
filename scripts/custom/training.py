@@ -2,7 +2,7 @@
 SynthSeg training script for claustrum segmentation
 #######
 Version: hd95.warmup
-Changelog: -1000 epochs -same train set as experiment_20261004_222521_new.train.val.split.more.warp
+Changelog: -new train set -compare with: experiment_20261006_220553_train.val.split.more.warp.1000ep
 Check: 
 #######
 """
@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'hd95.warmup'
+version = 'cleaned.t1w'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -82,7 +82,7 @@ feat_multiplier = 2
 # Training parameters
 lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
-dice_epochs = 200
+dice_epochs = 100
 steps_per_epoch = 1000
 validation_steps = 80  
 
@@ -99,7 +99,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0.005
+hd95_weight = 0
 
 # Shape and resolution
 target_res = 0.50

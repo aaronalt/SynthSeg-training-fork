@@ -237,7 +237,7 @@ for path_model in model_files:
             path_segmentation_labels,
             n_neutral_labels=n_neutral_labels,
             path_posteriors=path_posteriors,
-            use_posteriors=True,
+            use_posteriors=False,
             posterior_threshold=0.30,
             path_resampled=path_resampled,
             path_volumes=path_vol,

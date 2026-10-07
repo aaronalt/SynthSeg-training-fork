@@ -91,6 +91,8 @@ def predict(path_images,
             n_neutral_labels=None,
             names_segmentation=None,
             path_posteriors=None,
+            use_posteriors=False,
+            posterior_threshold=0.30,
             path_resampled=None,
             path_volumes=None,
             min_pad=None,
@@ -272,60 +274,133 @@ def predict(path_images,
                 write_csv(path_volumes[i], row, unique_vol_file, labels_segmentation, names_segmentation)
 
     # evaluate
-    if gt_folder is not None:
+    if use_posteriors:
+        # evaluate
+        if gt_folder is not None:
 
-        # find path where segmentations are saved evaluation folder, and get labels on which to evaluate
-        eval_folder = os.path.dirname(path_segmentations[0])
-        if evaluation_labels is None:
-            evaluation_labels = labels_segmentation
+            # find path where segmentations are saved evaluation folder, and get labels on which to evaluate
+            eval_folder = os.path.dirname(path_segmentations[0])
+            if evaluation_labels is None:
+                evaluation_labels = labels_segmentation
 
-        print(f"\nEvaluating segmentations in {eval_folder} against ground truth in {gt_folder}...")
-        
-        # set path of result arrays for surface distance if necessary
-        if compute_distances:
-            path_hausdorff = os.path.join(eval_folder, 'hausdorff.npy')
-            path_hausdorff_99 = os.path.join(eval_folder, 'hausdorff_99.npy')
-            path_hausdorff_95 = os.path.join(eval_folder, 'hausdorff_95.npy')
-            path_mean_distance = os.path.join(eval_folder, 'mean_distance.npy')
-        else:
-            path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
+            print(f"\nEvaluating segmentations in {eval_folder} against ground truth in {gt_folder}...")
 
-        gt_paths = _collect_gt_paths(gt_folder)
-        matched_paths = _match_gt_paths(path_segmentations, gt_paths)
+            # set path of result arrays for surface distance if necessary
+            if compute_distances:
+                path_hausdorff = os.path.join(eval_folder, 'hausdorff.npy')
+                path_hausdorff_99 = os.path.join(eval_folder, 'hausdorff_99.npy')
+                path_hausdorff_95 = os.path.join(eval_folder, 'hausdorff_95.npy')
+                path_mean_distance = os.path.join(eval_folder, 'mean_distance.npy')
+            else:
+                path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
 
-        # Resample each prediction onto its paired GT grid for voxelwise evaluation.
-        with tempfile.TemporaryDirectory(prefix='synthseg_evaluation_') as temp_dir:
-            aligned_seg_dir = os.path.join(temp_dir, 'segmentations')
-            os.makedirs(aligned_seg_dir)
-            aligned_gt_paths = []
-            for index, (path_seg, path_gt) in enumerate(matched_paths):
-                seg_image = nib.load(path_seg)
-                gt_image = nib.load(path_gt)
-                aligned_seg = resample_from_to(seg_image,
-                                               (gt_image.shape, gt_image.affine),
-                                               order=0)
+            gt_paths = _collect_gt_paths(gt_folder)
+            matched_paths = _match_gt_paths(path_segmentations, gt_paths)
 
-                gt_stem = Path(path_gt).stem.replace('.nii', '')
-                aligned_seg_path = os.path.join(aligned_seg_dir, f'{index:06d}_{gt_stem}_seg.nii.gz')
-                aligned_gt_path = os.path.join(temp_dir, f'{index:06d}_{gt_stem}_gt.nii.gz')
-                nib.save(aligned_seg, aligned_seg_path)
-                nib.save(gt_image, aligned_gt_path)
-                aligned_gt_paths.append(aligned_gt_path)
+            # Resample each prediction onto its paired GT grid for voxelwise evaluation.
+            with tempfile.TemporaryDirectory(prefix='synthseg_evaluation_') as temp_dir:
+                aligned_seg_dir = os.path.join(temp_dir, 'segmentations')
+                os.makedirs(aligned_seg_dir)
+                aligned_gt_paths = []
+                for index, (path_seg, path_gt) in enumerate(matched_paths):
+                    seg_image = nib.load(path_seg)
+                    gt_image = nib.load(path_gt)
 
-            evaluate.evaluation(aligned_gt_paths,
-                                aligned_seg_dir,
-                                label_list=evaluation_labels,
-                                path_dice=os.path.join(eval_folder, 'dice.npy'),
-                                path_hausdorff=path_hausdorff,
-                                path_hausdorff_99=path_hausdorff_99,
-                                path_hausdorff_95=path_hausdorff_95,
-                                path_mean_distance=path_mean_distance,
-                                path_precision=os.path.join(eval_folder, 'precision.npy'),
-                                path_recall=os.path.join(eval_folder, 'recall.npy'),
-                                list_incorrect_labels=list_incorrect_labels,
-                                list_correct_labels=list_correct_labels,
-                                recompute=recompute,
-                                verbose=verbose)
+                    # ================= STRATEGY 1: THRESHOLDING POSTERIORS =================
+                    seg_data = seg_image.get_fdata()
+
+                    # Check if input volume contains soft probability maps (floats <= 1.0)
+                    if np.issubdtype(seg_data.dtype, np.floating) or seg_data.max() <= 1.0:
+                        gt_stem = Path(path_gt).stem.lower()
+
+
+                        target_label = 138 if ('lh' in gt_stem or 'left' in gt_stem) else 139
+                        hard_seg_data = np.where(seg_data >= posterior_threshold, target_label, 0).astype(np.int32)
+
+                        # Reconstruct soft map into discrete hard integer segmentation
+                        seg_image = nib.Nifti1Image(hard_seg_data, seg_image.affine, seg_image.header)
+                    # =======================================================================
+
+                    aligned_seg = resample_from_to(seg_image,
+                                                   (gt_image.shape, gt_image.affine),
+                                                   order=0)
+
+                    gt_stem = Path(path_gt).stem.replace('.nii', '')
+                    aligned_seg_path = os.path.join(aligned_seg_dir, f'{index:06d}_{gt_stem}_seg.nii.gz')
+                    aligned_gt_path = os.path.join(temp_dir, f'{index:06d}_{gt_stem}_gt.nii.gz')
+                    nib.save(aligned_seg, aligned_seg_path)
+                    nib.save(gt_image, aligned_gt_path)
+                    aligned_gt_paths.append(aligned_gt_path)
+
+                evaluate.evaluation(aligned_gt_paths,
+                                    aligned_seg_dir,
+                                    label_list=evaluation_labels,
+                                    path_dice=os.path.join(eval_folder, 'dice.npy'),
+                                    path_hausdorff=path_hausdorff,
+                                    path_hausdorff_99=path_hausdorff_99,
+                                    path_hausdorff_95=path_hausdorff_95,
+                                    path_mean_distance=path_mean_distance,
+                                    path_precision=os.path.join(eval_folder, 'precision.npy'),
+                                    path_recall=os.path.join(eval_folder, 'recall.npy'),
+                                    list_incorrect_labels=list_incorrect_labels,
+                                    list_correct_labels=list_correct_labels,
+                                    recompute=recompute,
+                                    verbose=verbose)
+    else:
+        if gt_folder is not None:
+
+            # find path where segmentations are saved evaluation folder, and get labels on which to evaluate
+            eval_folder = os.path.dirname(path_segmentations[0])
+            if evaluation_labels is None:
+                evaluation_labels = labels_segmentation
+
+            print(f"\nEvaluating segmentations in {eval_folder} against ground truth in {gt_folder}...")
+
+            # set path of result arrays for surface distance if necessary
+            if compute_distances:
+                path_hausdorff = os.path.join(eval_folder, 'hausdorff.npy')
+                path_hausdorff_99 = os.path.join(eval_folder, 'hausdorff_99.npy')
+                path_hausdorff_95 = os.path.join(eval_folder, 'hausdorff_95.npy')
+                path_mean_distance = os.path.join(eval_folder, 'mean_distance.npy')
+            else:
+                path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
+
+            gt_paths = _collect_gt_paths(gt_folder)
+            matched_paths = _match_gt_paths(path_segmentations, gt_paths)
+
+            # Resample each prediction onto its paired GT grid for voxelwise evaluation.
+            with tempfile.TemporaryDirectory(prefix='synthseg_evaluation_') as temp_dir:
+                aligned_seg_dir = os.path.join(temp_dir, 'segmentations')
+                os.makedirs(aligned_seg_dir)
+                aligned_gt_paths = []
+                for index, (path_seg, path_gt) in enumerate(matched_paths):
+                    seg_image = nib.load(path_seg)
+                    gt_image = nib.load(path_gt)
+                    aligned_seg = resample_from_to(seg_image,
+                                                   (gt_image.shape, gt_image.affine),
+                                                   order=0)
+
+                    gt_stem = Path(path_gt).stem.replace('.nii', '')
+                    aligned_seg_path = os.path.join(aligned_seg_dir, f'{index:06d}_{gt_stem}_seg.nii.gz')
+                    aligned_gt_path = os.path.join(temp_dir, f'{index:06d}_{gt_stem}_gt.nii.gz')
+                    nib.save(aligned_seg, aligned_seg_path)
+                    nib.save(gt_image, aligned_gt_path)
+                    aligned_gt_paths.append(aligned_gt_path)
+
+                evaluate.evaluation(aligned_gt_paths,
+                                    aligned_seg_dir,
+                                    label_list=evaluation_labels,
+                                    path_dice=os.path.join(eval_folder, 'dice.npy'),
+                                    path_hausdorff=path_hausdorff,
+                                    path_hausdorff_99=path_hausdorff_99,
+                                    path_hausdorff_95=path_hausdorff_95,
+                                    path_mean_distance=path_mean_distance,
+                                    path_precision=os.path.join(eval_folder, 'precision.npy'),
+                                    path_recall=os.path.join(eval_folder, 'recall.npy'),
+                                    list_incorrect_labels=list_incorrect_labels,
+                                    list_correct_labels=list_correct_labels,
+                                    recompute=recompute,
+                                    verbose=verbose)
 
 
 def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, out_volumes, recompute):

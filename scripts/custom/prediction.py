@@ -62,7 +62,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_223317_hd95.01'
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261007_114916_hd95.warmup'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-# model_files = model_files[35:]
+model_files = model_files[22:]
 
 # Ground truth directories for evaluation
 gt_dirs = {

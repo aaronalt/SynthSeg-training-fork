@@ -30,13 +30,6 @@ DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evalu
 FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
 RERUN_TMP_PREDICTIONS = False
 
-# === TTA UNCERTAINTY OPTIONS ===
-ENABLE_TTA_UNCERTAINTY = False       # Generate claustrum uncertainty maps via TTA
-N_TTA_AUGMENTATIONS = 5            # Number of augmented predictions per image
-TTA_UNCERTAINTY_TYPE = 'entropy'    # 'entropy', 'variance', 'confidence', 'mutual_information'
-TTA_STRENGTH = 0.25                 # Augmentation strength (0-1). 1.0=training intensity, 0.25=gentle TTA
-TTA_QUALITY_MODEL_WEIGHTS = None # '/home/althause/data/weights/quality_model_weights_features.npz'  # Ridge model (.npz) or None to skip
-
 # Store results across all models for summary
 all_model_results = []
 model_dice_scores = {}  # Track mean dice per model for cleanup
@@ -56,13 +49,9 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-# model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_203703' # /home/althause/data/logs/10000_steps_minus_bad_labels.log
-# model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260218_211654' # /home/althause/data/logs/10000_steps_gaussian_noise.log
-# model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261002_130803_only_quality_labels_0.66mm' # /home/althause/data/logs/7t_validation.log
-# model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261004_223317_hd95.01'
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261007_165829_cleaned.t1w'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[52:]
+model_files = model_files[63:65]
 
 # Ground truth directories for evaluation
 gt_dirs = {
@@ -79,56 +68,6 @@ gt_dirs = {
     ]
 }
 
-
-def find_ground_truth(subject_id, hemisphere, modality=None):
-    patterns = [
-        f'*{subject_id}*{hemisphere}*.nii.gz',
-        f'*{subject_id}*_{hemisphere}_*.nii.gz',
-        f'sub-{subject_id}*{hemisphere}*.nii.gz',
-    ]
-
-    for gt_dir in active_gt_dirs:
-        if not gt_dir.exists():
-            continue
-        for pattern in patterns:
-            matches = list(gt_dir.glob(pattern))
-            if matches:
-                if modality:
-                    for m in matches:
-                        if modality in m.name.lower():
-                            return m
-                return matches[0]
-    return None
-
-
-def match_ground_truth_files(path_segmentations, ground_truth_dirs):
-    """Match prediction files with ground-truth files by subject/hemisphere."""
-    matches = []
-    for prediction in sorted(Path(path_segmentations).glob('*.nii.gz')):
-        name = prediction.name
-        match = re.search(r'(\d+).*?(lh|rh)', name, re.IGNORECASE)
-        if not match:
-            continue
-        subject_id, hemisphere = match.groups()
-        gt = None
-        patterns = [
-            f'*{subject_id}*{hemisphere}*.nii.gz',
-            f'*{subject_id}*_{hemisphere}_*.nii.gz',
-            f'sub-{subject_id}*{hemisphere}*.nii.gz',
-        ]
-        for directory in ground_truth_dirs:
-            if not directory.exists():
-                continue
-            for pattern in patterns:
-                candidates = sorted(directory.glob(pattern))
-                if candidates:
-                    gt = candidates[0]
-                    break
-            if gt is not None:
-                break
-        if gt is not None:
-            matches.append((str(prediction), str(gt)))
-    return matches
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')
 def get_epoch(f):
@@ -209,21 +148,8 @@ for path_model in model_files:
     feat_multiplier = trained_model_params.get('feat_multiplier')
     n_channels = trained_model_params.get('n_channels')
 
-    '''
-    print("\n=== Prediction Configuration ===")
-    print(f"Input images: {path_images}")
-    print(f"Output directory: {path_segm}")
-    print(f"Model: {path_model}")
-    print(f"Target resolution: {target_res}")
-    print(f"n_channels: {n_channels}")
-    print("\nStarting prediction...\n")
-    print(f'path_images: {path_images}')
-    print(f'path_segm: {path_segm}')
-    '''
-
-    # gt_matches = match_ground_truth_files(path_segm, active_gt_dirs)
-    # gt_all = [gt_path for _, gt_path in gt_matches]
-    path_gt = '/home/althause/data/claustrum_gt/3T'
+    # path_gt = '/home/althause/data/claustrum_gt/3T'
+    path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below
     for stale_npy in sorted(Path(path_segm).rglob('*.npy')):
@@ -395,7 +321,7 @@ else:
     print("No validation curves were generated.")
 
 # draw_learning_curve plots 1 - loss from tensorboard event files; it shows the figure but does not
-# save it, so save the current figure afterwards. It draws one curve per element of
+# save it, so save the current figure afterward. It draws one curve per element of
 # path_tensorboard_files, so wrap each experiment's event files (sorted() order is chronological
 # for tfevents files) as a single element, with matching names.
 if list_tb_files:

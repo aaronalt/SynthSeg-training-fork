@@ -372,12 +372,18 @@ def predict(path_images,
 
             print(f"\nEvaluating segmentations in {eval_folder} against ground truth in {gt_folder}...")
 
-            # set path of result arrays for surface distance if necessary
             if compute_distances:
-                path_hausdorff = os.path.join(eval_folder, 'hausdorff.npy')
-                path_hausdorff_99 = os.path.join(eval_folder, 'hausdorff_99.npy')
-                path_hausdorff_95 = os.path.join(eval_folder, 'hausdorff_95.npy')
-                path_mean_distance = os.path.join(eval_folder, 'mean_distance.npy')
+                if 'mauri' in gt_folder:
+                    utils.mkdir(os.path.join(eval_folder, 'mauri'))
+                    path_hausdorff = os.path.join(eval_folder, 'mauri', 'hausdorff.npy')
+                    path_hausdorff_99 = os.path.join(eval_folder, 'mauri', 'hausdorff_99.npy')
+                    path_hausdorff_95 = os.path.join(eval_folder, 'mauri', 'hausdorff_95.npy')
+                    path_mean_distance = os.path.join(eval_folder, 'mauri', 'mean_distance.npy')
+                else:
+                    path_hausdorff = os.path.join(eval_folder, 'hausdorff.npy')
+                    path_hausdorff_99 = os.path.join(eval_folder, 'hausdorff_99.npy')
+                    path_hausdorff_95 = os.path.join(eval_folder, 'hausdorff_95.npy')
+                    path_mean_distance = os.path.join(eval_folder, 'mean_distance.npy')
             else:
                 path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
 
@@ -403,16 +409,25 @@ def predict(path_images,
                     nib.save(gt_image, aligned_gt_path)
                     aligned_gt_paths.append(aligned_gt_path)
 
+                if 'mauri' in gt_folder:
+                    path_dice = os.path.join(eval_folder, 'mauri', 'dice.npy')
+                    path_precision = os.path.join(eval_folder, 'mauri', 'precision.npy')
+                    path_recall = os.path.join(eval_folder, 'mauri', 'recall.npy')
+                else:
+                    path_dice = os.path.join(eval_folder, 'dice.npy')
+                    path_precision = os.path.join(eval_folder, 'precision.npy')
+                    path_recall = os.path.join(eval_folder, 'recall.npy')
+
                 evaluate.evaluation(aligned_gt_paths,
                                     aligned_seg_dir,
                                     label_list=evaluation_labels,
-                                    path_dice=os.path.join(eval_folder, 'dice.npy'),
+                                    path_dice=path_dice,
                                     path_hausdorff=path_hausdorff,
                                     path_hausdorff_99=path_hausdorff_99,
                                     path_hausdorff_95=path_hausdorff_95,
                                     path_mean_distance=path_mean_distance,
-                                    path_precision=os.path.join(eval_folder, 'precision.npy'),
-                                    path_recall=os.path.join(eval_folder, 'recall.npy'),
+                                    path_precision=path_precision,
+                                    path_recall=path_recall,
                                     list_incorrect_labels=list_incorrect_labels,
                                     list_correct_labels=list_correct_labels,
                                     recompute=recompute,

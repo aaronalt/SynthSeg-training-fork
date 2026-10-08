@@ -2,8 +2,12 @@
 SynthSeg training script for claustrum segmentation
 #######
 Version: hd95.warmup.reduceLROnPlateau
-Changelog: -added reduceLRonPlateau, hd95 loss more gradual warmup 10-40 epochs .0001-.0025 -compare with: hd95.warmup
-Check: 
+Changelog:
+-added reduceLRonPlateau
+-hd95 loss more gradual warmup 10-40 epochs .0001-.0025
+-loaded weights from ep10
+Compare with: hd95.warmup
+
 #######
 """
 
@@ -68,7 +72,7 @@ if VERBOSE:
 
 # === MODEL PARAMETERS ===
 # Pre-trained model
-path_checkpoint =  '/home/althause/data/weights/mauri_unet_weights.h5'
+path_checkpoint = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261007_114916_hd95.warmup/dice_finetune_010_200.h5'  # '/home/althause/data/weights/mauri_unet_weights.h5'
 batchsize = 1
 
 # Architecture parameters

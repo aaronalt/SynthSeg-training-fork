@@ -29,7 +29,7 @@ import keras.callbacks as KC
 from keras.optimizers import Adam
 import tensorflow.keras.backend as K
 from inspect import getmembers, isclass
-from tensorflow.keras.callbacks import Callback
+from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau
 from tensorflow.keras import layers as keras_layers
 from keras.utils import Sequence
 
@@ -428,11 +428,23 @@ def train_model(model,
         hd95_callback = HD95WarmupCallback(
             dice_loss_layer=dice_loss_layer,
             start_epoch=10,
-            warmup_epochs=10,
-            initial_weight=0.001,
+            warmup_epochs=30,
+            initial_weight=0.0001,
             target_weight=hd95_weight
         )
         callbacks.append(hd95_callback)
+
+    reduce_lr = ReduceLROnPlateau(
+        monitor='val_loss',  # Metric to monitor
+        factor=0.5,  # Multiplier: new_lr = lr * factor (halves LR)
+        patience=5,  # Wait 5 epochs without improvement before reducing LR
+        verbose=1,  # Log LR update message in console
+        min_delta=0.001,  # Minimum loss change to qualify as an improvement
+        cooldown=2,  # Wait 2 epochs after LR drop before resuming monitoring
+        mode='min',  # 'min' for loss, 'max' for accuracy/Dice scores
+        min_lr=1e-7  # Lower limit for learning rate
+    )
+    callbacks.append(reduce_lr)
 
     compile_model = True
     init_epoch = 0

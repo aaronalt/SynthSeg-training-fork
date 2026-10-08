@@ -1,8 +1,8 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: hd95.warmup
-Changelog: -new train set -compare with: experiment_20261006_220553_train.val.split.more.warp.1000ep
+Version: hd95.warmup.reduceLROnPlateau
+Changelog: -added reduceLRonPlateau, hd95 loss more gradual warmup 10-40 epochs .0001-.0025 -compare with: hd95.warmup
 Check: 
 #######
 """
@@ -28,7 +28,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'cleaned.t1w'
+version = 'hd95.warmup.reduceLROnPlateau'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -38,8 +38,8 @@ log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
 # Train, val, test sets
-TRAIN = Path('/home/althause/data/TRAIN/CAT')
-VAL = Path('/home/althause/data/VAL/CAT')
+TRAIN = Path('/home/althause/data/TRAIN')
+VAL = Path('/home/althause/data/VAL')
 TEST = Path('/home/althause/data/TEST')
 train_subjects = sorted(TRAIN.iterdir())
 val_subjects = sorted(VAL.iterdir())
@@ -82,7 +82,7 @@ feat_multiplier = 2
 # Training parameters
 lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
-dice_epochs = 100
+dice_epochs = 200
 steps_per_epoch = 1000
 validation_steps = 80  
 
@@ -99,7 +99,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0
+hd95_weight = 0.0001
 
 # Shape and resolution
 target_res = 0.50

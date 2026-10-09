@@ -24,13 +24,17 @@ from SynthSeg.estimate_priors import build_intensity_stats
 # === DATA SETUP ===
 import shutil
 from ext.lab2im import utils as lab2im_utils
+import torch
+# Enable TF32 for Ampere Tensor Cores (A30)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 # === CONFIGURATION ===
 
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'lower.augment.no.hd95'
+version = 'lower.augment.no.hd95.'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"

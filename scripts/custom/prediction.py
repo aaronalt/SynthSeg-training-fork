@@ -51,7 +51,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # Find all model checkpoints and sort by epoch number
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261008_110138_hd95.warmup.reduceLROnPlateau'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-# model_files = model_files[63:65]
+model_files = model_files[18:19]
 
 # Ground truth directories for evaluation
 gt_dirs = {
@@ -137,7 +137,7 @@ for path_model in model_files:
     target_res = trained_model_params.get('target_res')
     flip = True
     sigma_smoothing = 0.5
-    keep_biggest_component = False
+    keep_biggest_component = True
 
     # Architecture (must match training!)
     n_levels = trained_model_params.get('n_levels')

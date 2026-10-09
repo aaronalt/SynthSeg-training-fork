@@ -11,6 +11,7 @@ Compare with: train.val.split.etc
 
 import os
 import tensorflow as tf
+from tensorflow.keras import mixed_precision
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import datetime
@@ -24,10 +25,11 @@ from SynthSeg.estimate_priors import build_intensity_stats
 # === DATA SETUP ===
 import shutil
 from ext.lab2im import utils as lab2im_utils
-import torch
+
+# Enable BF16 Mixed Precision for NVIDIA A30
+mixed_precision.set_global_policy('mixed_bfloat16')
 # Enable TF32 for Ampere Tensor Cores (A30)
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
+tf.config.experimental.enable_tensor_float_32_execution(True)
 
 # === CONFIGURATION ===
 

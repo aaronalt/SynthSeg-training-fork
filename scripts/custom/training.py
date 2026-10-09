@@ -1,7 +1,7 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: lower.augment.no.hd95
+Version: lower.augment.no.hd95.
 Changelog:
 -less aggressive augmentation with train.val.split. training set
 Compare with: train.val.split.etc
@@ -30,7 +30,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'hd95.patience'
+version = 'lower.augment.no.hd95'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"

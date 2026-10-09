@@ -1,11 +1,10 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: hd95.patience
+Version: lower.augment.no.hd95
 Changelog:
--added longer early stopping patience, added CAT data to TRAIN
--hd95 loss more gradual warmup 10-40 epochs .0001-.0025
-Compare with: hd95.warmup.ReduceLROnPlateau
+-less aggressive augmentation with train.val.split. training set
+Compare with: train.val.split.etc
 
 #######
 """
@@ -87,7 +86,7 @@ lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
 dice_epochs = 200
 steps_per_epoch = 1000
-validation_steps = 80  
+validation_steps = 60
 
 # Generation and segmentation labels
 path_generation_labels = np.array([0, 14, 15, 16, 24,
@@ -102,7 +101,7 @@ for lbl in [138, 139]:
     label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0.001
+hd95_weight = 0
 
 # Shape and resolution
 target_res = 0.50
@@ -121,14 +120,14 @@ scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.015
 translation_bounds = 15
-nonlin_std = 5.0
+nonlin_std = 2.0
 bias_field_std = 0.3
-noise_std = 100
+noise_std = 30
 
 # Acquisition resolution parameters
 randomise_res = True
-max_res_iso = 1.5
-max_res_aniso = 2.0
+max_res_iso = 1.2
+max_res_aniso = 1.2
 data_res = None
 thickness = None
 

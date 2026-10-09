@@ -1,12 +1,11 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: hd95.warmup.reduceLROnPlateau
+Version: hd95.patience
 Changelog:
--added reduceLRonPlateau
+-added longer early stopping patience, added CAT data to TRAIN
 -hd95 loss more gradual warmup 10-40 epochs .0001-.0025
--loaded weights from ep10
-Compare with: hd95.warmup
+Compare with: hd95.warmup.ReduceLROnPlateau
 
 #######
 """
@@ -32,7 +31,7 @@ from ext.lab2im import utils as lab2im_utils
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'hd95.warmup.reduceLROnPlateau'
+version = 'hd95.patience'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -72,7 +71,7 @@ if VERBOSE:
 
 # === MODEL PARAMETERS ===
 # Pre-trained model
-path_checkpoint = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261007_114916_hd95.warmup/dice_finetune_010_200.h5'  # '/home/althause/data/weights/mauri_unet_weights.h5'
+path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
 batchsize = 1
 
 # Architecture parameters

@@ -36,7 +36,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'lower.augment.no.hd95.'
+version = 'lower.augment.no.hd95.32feat.4levels'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -80,10 +80,10 @@ path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
 batchsize = 1
 
 # Architecture parameters
-n_levels = 5
+n_levels = 4
 nb_conv_per_level = 2
 conv_size = 3
-unet_feat_count = 24
+unet_feat_count = 32
 activation = 'elu'
 feat_multiplier = 2
 

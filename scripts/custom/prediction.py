@@ -225,11 +225,11 @@ for path_model in model_files:
 
             dfs.append(df)
 
-        csv_path = os.path.join(path_segm, 'metrics.csv')
+        csv_path = os.path.join(path_segm, 'mauri', 'metrics.csv')
         pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)
         print(f'Combined {len(npy_files)} .npy files into {csv_path}')
         if tidy_rows:
-            tidy_path = os.path.join(path_segm, 'metrics_tidy.csv')
+            tidy_path = os.path.join(path_segm, 'mauri', 'metrics_tidy.csv')
             pd.DataFrame(tidy_rows).to_csv(tidy_path, index=False)
             print(f'Wrote {len(tidy_rows)} rows (all metrics, long format) to {tidy_path}')
     else:

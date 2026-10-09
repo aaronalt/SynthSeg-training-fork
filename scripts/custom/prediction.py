@@ -49,9 +49,9 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261007_165829_cleaned.t1w'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261008_110138_hd95.warmup.reduceLROnPlateau'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[63:65]
+# model_files = model_files[63:65]
 
 # Ground truth directories for evaluation
 gt_dirs = {
@@ -148,8 +148,8 @@ for path_model in model_files:
     feat_multiplier = trained_model_params.get('feat_multiplier')
     n_channels = trained_model_params.get('n_channels')
 
-    # path_gt = '/home/althause/data/claustrum_gt/3T'
-    path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
+    path_gt = '/home/althause/data/claustrum_gt/3T'
+    # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below
     for stale_npy in sorted(Path(path_segm).rglob('*.npy')):

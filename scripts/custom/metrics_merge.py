@@ -24,7 +24,8 @@ def merge_metrics_npy(path_segm, eval_label_names=('138', '139')):
     :param eval_label_names: row names matching the evaluation_labels used during evaluation.
     :return: (csv_path, tidy_path), or (None, None) if no .npy files were found.
     """
-    npy_files = sorted(Path(path_segm).rglob('*.npy'))
+    if
+    npy_files = sorted(Path(f'{path_segm}/mauri).rglob('*.npy'))
     if not npy_files:
         print(f'No .npy files found under {path_segm}')
         return None, None

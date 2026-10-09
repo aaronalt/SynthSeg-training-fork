@@ -200,18 +200,36 @@ def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
 
 if __name__ == '__main__':
     argv = sys.argv[1:]
+
+    # Parse --models flag
     models_dir = None
     if '--models' in argv:
         i = argv.index('--models')
         models_dir = argv[i + 1]
         del argv[i:i + 2]
+
+    # Parse --mauri flag (turns mauri subfolder search ON)
+    use_mauri = False
+    if '--mauri' in argv:
+        i = argv.index('--mauri')
+        use_mauri = True
+        del argv[i]
+
     args = argv or [DEFAULT_SEG_ROOT]
     n_written = 0
     loss_plotted = False
     for arg in args:
-        folders = find_seg_folders(arg)
+        raw_folders = find_seg_folders(arg)
+
+        # Toggle between 'mauri' subfolders and original folders
+        if use_mauri:
+            folders = [os.path.join(f, 'mauri') for f in raw_folders if os.path.isdir(os.path.join(f, 'mauri'))]
+        else:
+            folders = raw_folders
+
         if not folders:
-            print(f'No .npy files found under {arg}')
+            target_str = '"mauri" subfolders' if use_mauri else '.npy files'
+            print(f'No {target_str} found under {arg}')
         for folder in folders:
             print(f'\n=== {folder} ===')
             csv_path, _ = merge_metrics_npy(folder)

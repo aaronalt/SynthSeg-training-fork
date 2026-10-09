@@ -411,7 +411,7 @@ def train_model(model,
     callbacks = [
         KC.ModelCheckpoint(save_file_name, save_weights_only=True, verbose=1),
         KC.CSVLogger(os.path.join(log_dir, 'training.log')),
-        KC.EarlyStopping(monitor='val_loss', patience=15, verbose=1, restore_best_weights=True),
+        KC.EarlyStopping(monitor='val_loss', patience=35, verbose=1, restore_best_weights=True),
         KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch')
     ]
 

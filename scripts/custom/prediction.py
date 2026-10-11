@@ -10,7 +10,7 @@ import keras
 import tensorflow as tf
 keras.backend.set_image_data_format('channels_last')
 from SynthSeg.predict import predict
-from SynthSeg.evaluate import evaluation
+from SynthSeg.evaluate import compute_non_parametric_paired_test, cohens_d
 from SynthSeg.validate import validate_training, plot_validation_curves, draw_learning_curve
 import numpy as np
 from glob import glob
@@ -242,7 +242,11 @@ for path_model in model_files:
         print(f'No .npy files found under {path_segm}')
 
     # Collect per-epoch Dice scores for plot_validation_curves (expects <dir>/epoch_*/dice.npy)
-    path_dice = os.path.join(path_segm, 'dice.npy')
+    if 'mauri' in path_gt:
+        path_dice = os.path.join(path_segm, 'mauri', 'dice.npy')
+    else:
+        path_dice = os.path.join(path_segm, 'dice.npy')
+
     if os.path.isfile(path_dice):
         epoch_dir = os.path.join(model_dir, 'validation', f'epoch_{get_epoch(path_model):03d}')
         os.makedirs(epoch_dir, exist_ok=True)
@@ -260,33 +264,7 @@ for path_model in model_files:
                   f'epoch mean over present labels: {np.nanmean(dice_scores):.4f}')
         np.save(os.path.join(epoch_dir, 'dice.npy'), dice_scores)
     
-    '''
-    #############
-    ## Validation
-    #############
 
-    validate_training(
-        image_dir=path_images,
-        gt_dir=path_gt,
-        models_dir=model_dir,
-        validation_main_dir=model_dir,
-        labels_segmentation=path_segmentation_labels,
-        n_neutral_labels=n_neutral_labels,
-        cropping=cropping,
-        target_res=target_res,
-        flip=flip,
-        topology_classes=path_topology_classes,
-        sigma_smoothing=sigma_smoothing,
-        keep_biggest_component=keep_biggest_component,
-        n_levels=n_levels,
-        nb_conv_per_level=nb_conv_per_level,
-        conv_size=conv_size,
-        unet_feat_count=unet_feat_count,
-        feat_multiplier=feat_multiplier,
-        activation=activation,
-        recompute=False
-    )
-    '''
 #############
 # Validation curves
 #############
@@ -338,87 +316,3 @@ else:
     print(f"\nNo tensorboard event files found under {models_root}; skipping learning curve.")
 
 
-'''
-# Summary across all epochs
-if all_model_results:
-    df = pd.DataFrame(all_model_results)
-    summary_path = os.path.join(model_dir, 'epoch_evaluation_summary.csv')
-    df.to_csv(summary_path, index=False)
-    print(f"\n{'='*60}")
-    print("SUMMARY: Performance across epochs")
-    print(f"{'='*60}")
-
-    # Group by epoch and compute mean metrics
-    if 'dice' in df.columns:
-        agg_cols = {'dice': ['mean', 'std']}
-        for col in ['precision', 'recall', 'iou']:
-            if col in df.columns:
-                agg_cols[col] = ['mean', 'std']
-        epoch_summary = df.groupby('epoch').agg(agg_cols)
-        epoch_summary.columns = ['_'.join(c) for c in epoch_summary.columns]
-
-        # Composite score: equal weight of dice, precision, recall, iou
-        metric_means = [c for c in epoch_summary.columns if c.endswith('_mean')]
-        epoch_summary['composite'] = epoch_summary[metric_means].mean(axis=1)
-
-        has_prec = 'precision_mean' in epoch_summary.columns
-        has_rec  = 'recall_mean'    in epoch_summary.columns
-        has_iou  = 'iou_mean'       in epoch_summary.columns
-
-        header = f"{'Epoch':>6}  {'Dice':>7} ±{'':>5}  {'Prec':>7} ±{'':>5}  {'Recall':>7} ±{'':>5}  {'IoU':>7} ±{'':>5}  {'Composite':>9}"
-        print(f"\n{header}")
-        print("-" * len(header))
-        for epoch, row in epoch_summary.iterrows():
-            p = f"{row['precision_mean']:7.4f} {row['precision_std']:5.4f}" if has_prec else f"{'N/A':>7}  {'':>5}"
-            r = f"{row['recall_mean']:7.4f} {row['recall_std']:5.4f}"       if has_rec  else f"{'N/A':>7}  {'':>5}"
-            i = f"{row['iou_mean']:7.4f} {row['iou_std']:5.4f}"             if has_iou  else f"{'N/A':>7}  {'':>5}"
-            print(f"{epoch:>6}  {row['dice_mean']:7.4f} {row['dice_std']:5.4f}  {p}  {r}  {i}  {row['composite']:9.4f}")
-
-        best_by_dice      = epoch_summary['dice_mean'].idxmax()
-        best_by_composite = epoch_summary['composite'].idxmax()
-        print(f"\nBest epoch by Dice:      {best_by_dice} (Dice={epoch_summary.loc[best_by_dice,'dice_mean']:.4f})")
-        print(f"Best epoch by Composite: {best_by_composite} (Composite={epoch_summary.loc[best_by_composite,'composite']:.4f})")
-
-    print(f"\nFull results saved to: {summary_path}")
-    # Re-run prediction for best model and keep outputs
-    if RERUN_TMP_PREDICTIONS:
-        if model_dice_scores:
-            best_model_path = max(model_dice_scores, key=model_dice_scores.get)
-            best_model = os.path.basename(best_model_path)
-            print(f"\n{'='*60}")
-            print(f"Re-running prediction for BEST model: {best_model}")
-            print(f"{'='*60}\n")
-
-            # Final prediction paths (these will be kept)
-            path_segm_final = f'/home/althause/data/seg/{exp}/BEST_{best_model.replace(".h5", "")}'
-            path_posteriors_final = os.path.join(path_segm_final, 'posteriors')
-            path_resampled_final = os.path.join(path_segm_final, 'resampled')
-            path_vol_final = os.path.join(path_segm_final, 'volumes.csv')
-
-            os.makedirs(path_segm_final, exist_ok=True)
-            os.makedirs(path_posteriors_final, exist_ok=True)
-            os.makedirs(path_resampled_final, exist_ok=True)
-
-            predict(path_images,
-                    path_segm_final,
-                    best_model_path,
-                    path_segmentation_labels,
-                    n_neutral_labels=n_neutral_labels,
-                    path_posteriors=path_posteriors_final,
-                    path_resampled=path_resampled_final,
-                    path_volumes=path_vol_final,
-                    cropping=cropping,
-                    target_res=target_res,
-                    flip=flip,
-                    topology_classes=path_topology_classes,
-                    sigma_smoothing=sigma_smoothing,
-                    keep_biggest_component=keep_biggest_component,
-                    n_levels=n_levels,
-                    nb_conv_per_level=nb_conv_per_level,
-                    conv_size=conv_size,
-                    unet_feat_count=unet_feat_count,
-                    feat_multiplier=feat_multiplier,
-                    activation=activation)
-
-            print(f"\nBest model predictions saved to: {path_segm_final}")
-'''

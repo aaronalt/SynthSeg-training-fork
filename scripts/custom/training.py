@@ -3,8 +3,9 @@ SynthSeg training script for claustrum segmentation
 #######
 Version: lower.augment.no.hd95.
 Changelog:
--less aggressive augmentation with train.val.split. training set
-Compare with: train.val.split.etc
+-claustrum weighted 1x, all others set to 0x (background)
+-check if loss function needs to be fixed as more invasive approach
+Compare with: lower.augment.no.hd95
 
 #######
 """
@@ -33,7 +34,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'lower.augment.no.hd95.32feat.4levels'
+version = 'clau1x'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -77,10 +78,10 @@ path_checkpoint = '/home/althause/data/weights/mauri_unet_weights.h5'
 batchsize = 1
 
 # Architecture parameters
-n_levels = 4
+n_levels = 5
 nb_conv_per_level = 2
 conv_size = 3
-unet_feat_count = 32
+unet_feat_count = 24
 activation = 'elu'
 feat_multiplier = 2
 
@@ -89,7 +90,7 @@ lr = 1e-4
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
 dice_epochs = 200
 steps_per_epoch = 1000
-validation_steps = 60
+validation_steps = 80
 
 # Generation and segmentation labels
 path_generation_labels = np.array([0, 14, 15, 16, 24,
@@ -98,10 +99,11 @@ path_generation_labels = np.array([0, 14, 15, 16, 24,
 n_neutral_labels = 5
 path_segmentation_labels = path_generation_labels.copy()
 
-# Label weights for Dice loss (Claustrum=10, others=1)
-label_weights = np.ones(len(path_segmentation_labels))
+# Label weights for Dice loss (Claustrum=1, others=0)
+label_weights = np.zeros(len(path_segmentation_labels))
 for lbl in [138, 139]:
-    label_weights[np.where(path_segmentation_labels == lbl)[0][0]] = 10.0
+    idx = np.where(path_segmentation_labels == lbl)[0][0]
+    label_weights[idx] = 1.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
 hd95_weight = 0

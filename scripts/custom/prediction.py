@@ -224,8 +224,10 @@ for path_model in model_files:
                 )
 
             dfs.append(df)
-
-        csv_path = os.path.join(path_segm, 'mauri', 'metrics.csv')
+        if 'mauri' in path_gt:
+            csv_path = os.path.join(path_segm, 'mauri', 'metrics.csv')
+        else:
+            csv_path = os.path.join(path_segm, 'metrics.csv')
         pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)
         print(f'Combined {len(npy_files)} .npy files into {csv_path}')
         if tidy_rows:

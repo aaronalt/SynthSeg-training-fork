@@ -226,6 +226,7 @@ for path_model in model_files:
             dfs.append(df)
         if 'mauri' in path_gt:
             csv_path = os.path.join(path_segm, 'mauri', 'metrics.csv')
+            utils.mkdir(csv_path)
         else:
             csv_path = os.path.join(path_segm, 'metrics.csv')
         pd.concat(dfs, ignore_index=True).to_csv(csv_path, index=False)

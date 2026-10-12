@@ -51,7 +51,7 @@ np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 # Find all model checkpoints and sort by epoch number
 model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261009_122019_lower.augment.no.hd95'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[39:]
+# model_files = model_files[39:]
 
 # Ground truth directories for evaluation
 gt_dirs = {
@@ -148,8 +148,9 @@ for path_model in model_files:
     feat_multiplier = trained_model_params.get('feat_multiplier')
     n_channels = trained_model_params.get('n_channels')
 
-    path_gt = '/home/althause/data/claustrum_gt/3T'
-    # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
+    # comment out to run predictions on mauri segmentations
+    #path_gt = '/home/althause/data/claustrum_gt/3T'
+    path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below
     for stale_npy in sorted(Path(path_segm).rglob('*.npy')):

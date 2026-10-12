@@ -21,6 +21,7 @@ import shutil
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
+import utils
 from compare_dice_batch import resample_to_target, evaluate
 from claustrum_uncertainty import predict_with_tta
 

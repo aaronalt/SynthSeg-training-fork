@@ -227,7 +227,7 @@ for path_model in model_files:
 
             dfs.append(df)
         if 'mauri' in path_gt:
-            os.path.join(path_segm, 'mauri').mkdir(parents=True, exist_ok=True)
+            # os.path.join(path_segm, 'mauri').mkdir(parents=True, exist_ok=True)
             csv_path = os.path.join(path_segm, 'mauri', 'metrics.csv')
         else:
             csv_path = os.path.join(path_segm, 'metrics.csv')

@@ -38,27 +38,94 @@ from ext.lab2im import edit_volumes
 from ext.neuron import models as nrn_models
 
 
+def _extract_subject_hemi(filename):
+    """Extract subject ID and hemisphere (lh/rh or left/right) from a filename."""
+    name_lower = filename.lower()
+
+    # Extract hemisphere
+    hemi = None
+    if 'lh' in name_lower or 'left' in name_lower:
+        hemi = 'lh'
+    elif 'rh' in name_lower or 'right' in name_lower:
+        hemi = 'rh'
+
+    # Extract subject pattern (e.g., 'sub-01', 'sub_01', 'subject1', or first alphanumeric string)
+    subj_match = re.search(r'(sub[-\_]?\w+|subject[-\_]?\w+)', name_lower)
+    subj = subj_match.group(0) if subj_match else None
+
+    return subj, hemi
+
+
+def _find_matching_gt_in_folder(target_dir, subj, hemi):
+    """Search target_dir for a file matching subject and hemisphere."""
+    if not os.path.exists(target_dir):
+        return None
+
+    for p in Path(target_dir).rglob('*'):
+        if not p.is_file():
+            continue
+        if not (p.suffix.lower() in ('.nii', '.mgz', '.npz') or p.name.lower().endswith('.nii.gz')):
+            continue
+
+        p_name = p.name.lower()
+
+        # Match subject if identified
+        if subj and subj not in p_name:
+            continue
+        # Match hemisphere if identified
+        if hemi and (hemi not in p_name and ('left' if hemi == 'lh' else 'right') not in p_name):
+            continue
+
+        return str(p)
+    return None
+
+
 def _collect_gt_paths(gt_folder):
-    """Collect ground-truth image paths, including nested GT directories."""
+    """
+    Collect ground-truth image paths.
+    If an input file contains '7t' in its name, searches inside the '7T' subdirectory
+    for the corresponding subject and hemisphere GT file.
+    """
+
+    def resolve_single_path(path_str):
+        path_obj = Path(path_str)
+        filename_lower = path_obj.name.lower()
+
+        if os.path.isdir(path_str):
+            # Process directory contents recursively
+            return [
+                str(p) for p in sorted(path_obj.rglob('*'))
+                if p.is_file() and (p.suffix.lower() in ('.nii', '.mgz', '.npz')
+                                    or p.name.lower().endswith('.nii.gz'))
+            ]
+
+        # File input handling
+        if '7t' in filename_lower:
+            subj, hemi = _extract_subject_hemi(filename_lower)
+
+            # Determine base GT root (e.g., if path is /data/claustrum_gt/some_file.nii.gz)
+            gt_root = path_obj.parent
+            if gt_root.name.upper() in ('3T', '7T'):
+                gt_root = gt_root.parent  # Move up to /data/claustrum_gt
+
+            target_7t_dir = gt_root / '7T'
+
+            matched_gt = _find_matching_gt_in_folder(target_7t_dir, subj, hemi)
+            if matched_gt:
+                return [matched_gt]
+
+        return [path_str]
+
+    # Handle input list vs single directory/file input
     if isinstance(gt_folder, (list, tuple)):
         paths = []
         for path in gt_folder:
-            path = os.fspath(path)
-            if os.path.isdir(path):
-                paths.extend(str(p) for p in sorted(Path(path).rglob('*'))
-                             if p.is_file() and (p.suffix.lower() in ('.nii', '.mgz', '.npz')
-                                                 or p.name.lower().endswith('.nii.gz')))
-            else:
-                paths.append(path)
-        return sorted(paths, key=lambda path: (os.path.basename(path).lower(), path.lower()))
+            paths.extend(resolve_single_path(os.fspath(path)))
+        return sorted(set(paths), key=lambda p: (os.path.basename(p).lower(), p.lower()))
 
     gt_folder = os.fspath(gt_folder)
-    if os.path.isdir(gt_folder):
-        return sorted((str(path) for path in Path(gt_folder).rglob('*')
-                       if path.is_file() and (path.suffix.lower() in ('.nii', '.mgz', '.npz')
-                                              or path.name.lower().endswith('.nii.gz'))),
-                      key=lambda path: (os.path.basename(path).lower(), path.lower()))
-    return [gt_folder]
+    collected = resolve_single_path(gt_folder)
+    return sorted(collected, key=lambda p: (os.path.basename(p).lower(), p.lower()))
 
 
 def _match_gt_paths(path_segmentations, gt_paths):

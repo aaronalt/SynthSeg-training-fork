@@ -1,11 +1,11 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: lower.augment.no.hd95.
+Version: clau1x.more.data
 Changelog:
 -claustrum weighted 1x, all others set to 0x (background)
 -check if loss function needs to be fixed as more invasive approach
-Compare with: lower.augment.no.hd95
+Compare with: clau1x
 
 #######
 """
@@ -34,7 +34,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'clau1x'
+version = 'clau1x.more.data'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -44,9 +44,9 @@ log_dir = os.path.join(path_model_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
 # Train, val, test sets
-TRAIN = Path('/home/althause/data/TRAIN')
-VAL = Path('/home/althause/data/VAL')
-TEST = Path('/home/althause/data/TEST')
+TRAIN = Path('/home/althause/data/TRAIN_2')
+VAL = Path('/home/althause/data/VAL_2')
+TEST = Path('/home/althause/data/TEST_2')
 train_subjects = sorted(TRAIN.iterdir())
 val_subjects = sorted(VAL.iterdir())
 test_subjects = sorted(TEST.iterdir())

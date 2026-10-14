@@ -411,12 +411,12 @@ def train_model(model,
     metric_label = metric_type if isinstance(metric_type, str) else '+'.join(metric_type)
 
     # decide what to monitor: with combined losses there is no val_dice
-    if isinstance(metric_type, str) and metric_type == 'dice':
-        monitor = 'val_dice'
-        mode = 'max'
-    else:
-        monitor = 'val_loss'
-        mode = 'min'
+    # if isinstance(metric_type, str) and metric_type == 'dice':
+    #    monitor = 'val_dice'
+    #    mode = 'max'
+
+    monitor = 'val_loss'
+    mode = 'min'
 
     # prepare model and log folders
     utils.mkdir(model_dir)

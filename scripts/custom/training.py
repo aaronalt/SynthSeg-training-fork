@@ -198,5 +198,5 @@ training(TRAIN,
          label_weights=label_weights,
          hd95_weight=hd95_weight,
          metric_type=['dice','ce'],      # 'dice', ['dice','moment'], ['dice','ce']
-         loss_weights=[1.0, 0.5]                   # e.g. [1.0, 0.1]
+         loss_weights=[1.0, 0.1]                   # e.g. [1.0, 0.1]
          )

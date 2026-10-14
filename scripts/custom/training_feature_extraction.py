@@ -453,13 +453,13 @@ def train_model(model,
         callbacks.append(hd95_callback)
 
     reduce_lr = ReduceLROnPlateau(
-        monitor='val_dice',  # Metric to monitor
+        monitor='val_loss',  # Metric to monitor
         factor=0.5,  # Multiplier: new_lr = lr * factor (halves LR)
         patience=5,  # Wait 5 epochs without improvement before reducing LR
         verbose=1,  # Log LR update message in console
         min_delta=0.005,  # Minimum loss change to qualify as an improvement
         cooldown=2,  # Wait 2 epochs after LR drop before resuming monitoring
-        mode='max',  # 'min' for loss, 'max' for accuracy/Dice scores
+        mode='min',  # 'min' for loss, 'max' for accuracy/Dice scores
         min_lr=1e-6  # Lower limit for learning rate
     )
     callbacks.append(reduce_lr)

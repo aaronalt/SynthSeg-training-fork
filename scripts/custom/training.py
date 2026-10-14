@@ -105,7 +105,7 @@ for lbl in [138, 139]:
     label_weights[idx] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0
+hd95_weight = 0.001
 
 # Shape and resolution
 target_res = 0.50
@@ -198,5 +198,5 @@ training(TRAIN,
          label_weights=label_weights,
          hd95_weight=hd95_weight,
          metric_type=['dice'],      # 'dice', ['dice','moment'], ['dice','ce']
-         loss_weights=[1.0, 0.01]                   # e.g. [1.0, 0.1]
+         loss_weights=None                  # e.g. [1.0, 0.1]
          )

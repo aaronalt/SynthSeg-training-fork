@@ -410,14 +410,6 @@ def train_model(model,
     # string label for file names / checkpoint matching
     metric_label = metric_type if isinstance(metric_type, str) else '+'.join(metric_type)
 
-    # decide what to monitor: with combined losses there is no val_dice
-    # if isinstance(metric_type, str) and metric_type == 'dice':
-    #    monitor = 'val_dice'
-    #    mode = 'max'
-
-    monitor = 'val_loss'
-    mode = 'min'
-
     # prepare model and log folders
     utils.mkdir(model_dir)
     log_dir = os.path.join(model_dir, 'logs')
@@ -426,11 +418,20 @@ def train_model(model,
     # model saving callback
     save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_label, phase, n_epochs))
     # callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
+    if isinstance(metric_type, str) and metric_type == 'dice':
+        monitor, mode = 'val_dice', 'max'
+    else:
+        monitor, mode = 'val_loss', 'min'
+
     callbacks = [
         KC.ModelCheckpoint(save_file_name, save_weights_only=True, verbose=1),
         KC.CSVLogger(os.path.join(log_dir, 'training.log')),
-        KC.EarlyStopping(monitor=monitor, mode=mode, patience=12, verbose=1, restore_best_weights=True),
-        KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch')
+        KC.EarlyStopping(monitor=monitor, mode=mode, patience=12,
+                         verbose=1, restore_best_weights=True),
+        KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
+                       write_images=False, update_freq='epoch'),
+        ReduceLROnPlateau(monitor=monitor, mode=mode, factor=0.5, patience=5,
+                          verbose=1, min_delta=0.005, cooldown=2, min_lr=1e-6)
     ]
 
     if extra_callbacks:

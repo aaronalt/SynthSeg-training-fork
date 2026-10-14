@@ -154,7 +154,10 @@ def training(labels_dir,
              boundary_loss_labels=None,
              boundary_loss_alpha=2.0,
              boundary_loss_type='er',
-             boundary_loss_erosions=10):
+             boundary_loss_erosions=10,
+             metric_type='dice',  # 'dice', ['dice','moment'], ['dice','ce'], etc.
+             loss_weights=None,
+             ):
 
     # check epochs
     assert (wl2_epochs > 0) | (dice_epochs > 0), \
@@ -201,6 +204,8 @@ def training(labels_dir,
         'finetune': finetune,
         'label_weights': label_weights,
         'hd95_weight': hd95_weight,
+        'metric_type': metric_type,
+        'loss_weights': loss_weights,
         'boundary_loss_weight': boundary_loss_weight,
         'boundary_loss_labels': boundary_loss_labels,
         'boundary_loss_alpha': boundary_loss_alpha,
@@ -367,9 +372,11 @@ def training(labels_dir,
         dice_model = models.Model(unet_model.inputs, unet_model.outputs)
         dice_model = metrics.metrics_model(dice_model, 
                                            segmentation_labels, 
-                                           'dice',
+                                           metrics=metric_type,
                                            class_weights=label_weights, 
-                                           hd95_weight=hd95_weight)
+                                           hd95_weight=hd95_weight,
+                                           loss_weights=loss_weights
+                                           )
 
         # Use lower learning rate for finetuning
         finetune_lr = lr / 10
@@ -400,18 +407,29 @@ def train_model(model,
                 validation_steps=100,
                 hd95_weight=0.0):
 
+    # string label for file names / checkpoint matching
+    metric_label = metric_type if isinstance(metric_type, str) else '+'.join(metric_type)
+
+    # decide what to monitor: with combined losses there is no val_dice
+    if isinstance(metric_type, str) and metric_type == 'dice':
+        monitor = 'val_dice'
+        mode = 'max'
+    else:
+        monitor = 'val_loss'
+        mode = 'min'
+
     # prepare model and log folders
     utils.mkdir(model_dir)
     log_dir = os.path.join(model_dir, 'logs')
     utils.mkdir(log_dir)
 
     # model saving callback
-    save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_type, phase, n_epochs))
+    save_file_name = os.path.join(model_dir, '%s_%s_{epoch:03d}_%d.h5' % (metric_label, phase, n_epochs))
     # callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
     callbacks = [
         KC.ModelCheckpoint(save_file_name, save_weights_only=True, verbose=1),
         KC.CSVLogger(os.path.join(log_dir, 'training.log')),
-        KC.EarlyStopping(monitor='val_loss', patience=35, verbose=1, restore_best_weights=True),
+        KC.EarlyStopping(monitor=monitor, mode=mode, patience=12, verbose=1, restore_best_weights=True),
         KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, write_images=False, update_freq='epoch')
     ]
 
@@ -435,14 +453,14 @@ def train_model(model,
         callbacks.append(hd95_callback)
 
     reduce_lr = ReduceLROnPlateau(
-        monitor='val_loss',  # Metric to monitor
+        monitor='val_dice',  # Metric to monitor
         factor=0.5,  # Multiplier: new_lr = lr * factor (halves LR)
         patience=5,  # Wait 5 epochs without improvement before reducing LR
         verbose=1,  # Log LR update message in console
-        min_delta=0.001,  # Minimum loss change to qualify as an improvement
+        min_delta=0.005,  # Minimum loss change to qualify as an improvement
         cooldown=2,  # Wait 2 epochs after LR drop before resuming monitoring
-        mode='min',  # 'min' for loss, 'max' for accuracy/Dice scores
-        min_lr=1e-7  # Lower limit for learning rate
+        mode='max',  # 'min' for loss, 'max' for accuracy/Dice scores
+        min_lr=1e-6  # Lower limit for learning rate
     )
     callbacks.append(reduce_lr)
 
@@ -451,7 +469,7 @@ def train_model(model,
     if path_checkpoint is not None:
         if resume_epoch:
             init_epoch =  resume_epoch
-        if (not reinitialise_momentum) & (metric_type in path_checkpoint):
+        if (not reinitialise_momentum) & (metric_label in path_checkpoint):
             custom_l2i = {key: value for (key, value) in getmembers(layers, isclass) if key != 'Layer'}
             custom_nrn = {key: value for (key, value) in getmembers(nrn_layers, isclass) if key != 'Layer'}
             custom_objects = {**custom_l2i, **custom_nrn, 'tf': tf, 'keras': keras, 'loss': metrics.IdentityLoss().loss}

@@ -1,12 +1,10 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: clau1x.more.data
+Version: dice.moment.loss
 Changelog:
--claustrum weighted 1x, all others set to 0x (background)
--check if loss function needs to be fixed as more invasive approach
-Compare with: clau1x
-
+- dice + moment loss for compound error metrics
+-LR: 1e-4 to 1e-6 (plateau)
 #######
 """
 
@@ -34,7 +32,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'clau1x.more.data'
+version = 'dice.moment.loss'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -86,7 +84,7 @@ activation = 'elu'
 feat_multiplier = 2
 
 # Training parameters
-lr = 1e-4
+lr = 1e-3
 wl2_epochs = 0  # 0 to Skip warmup - using pretrained weights
 dice_epochs = 200
 steps_per_epoch = 1000
@@ -100,10 +98,10 @@ n_neutral_labels = 5
 path_segmentation_labels = path_generation_labels.copy()
 
 # Label weights for Dice loss (Claustrum=1, others=0)
-label_weights = np.zeros(len(path_segmentation_labels))
+label_weights = np.ones(len(path_segmentation_labels))
 for lbl in [138, 139]:
     idx = np.where(path_segmentation_labels == lbl)[0][0]
-    label_weights[idx] = 1.0
+    label_weights[idx] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
 hd95_weight = 0
@@ -197,5 +195,7 @@ training(TRAIN,
          prior_means=means,
          prior_stds=stds,
          label_weights=label_weights,
-         hd95_weight=hd95_weight
+         hd95_weight=hd95_weight,
+         metric_type=['dice','moment'],      # 'dice', ['dice','moment'], ['dice','ce'], etc.
+         loss_weights=[1.0, 0.05]                   # e.g. [1.0, 0.1]
          )

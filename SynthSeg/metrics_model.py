@@ -24,8 +24,8 @@ from keras.models import Model
 from ext.lab2im import layers
 
 
-def metrics_model(input_model, label_list, metrics='dice', class_weights=None, hd95_weight=0.0):
-
+def metrics_model(input_model, label_list, metrics='dice', class_weights=None,
+                  loss_weights=None, hd95_weight=0.0):
     # get prediction
     last_tensor = input_model.outputs[0]
     input_shape = last_tensor.get_shape().as_list()[1:]
@@ -45,23 +45,63 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None, h
     last_tensor._keras_shape = tuple(last_tensor.get_shape().as_list())
     labels_gt._keras_shape = tuple(labels_gt.get_shape().as_list())
 
-    if metrics == 'dice':
-        last_tensor = layers.DiceLoss(
-            class_weights=class_weights,
-            boundary_weights=5,      # Extra weight for boundary voxels
-            boundary_dist=1,         # Within 2 voxels of boundary (smaller for thin structures)
-            skip_background=True,    # Don't weight background boundaries (default)
-            hd95_weight=hd95_weight  # Weight of the HD95 boundary term (0 = disabled)
-        )([labels_gt, last_tensor])
+    # normalise metrics and weights to lists
+    if isinstance(metrics, str):
+        metrics = [metrics]
+        loss_weights = [1.0]
+    loss_weights = loss_weights or [1.0] * len(metrics)
+    assert len(metrics) == len(loss_weights), 'metrics and loss_weights must have the same length'
 
-    elif metrics == 'wl2':
-        last_tensor = layers.WeightedL2Loss(target_value=5)([labels_gt, last_tensor])
+    weighted_losses = []
 
+    for metric, weight in zip(metrics, loss_weights):
+
+        if metric == 'dice':
+            loss = layers.DiceLoss(
+                class_weights=class_weights,
+                boundary_weights=5,
+                boundary_dist=1,
+                skip_background=True,
+                hd95_weight=hd95_weight
+            )([labels_gt, last_tensor])
+
+        elif metric in ('ce', 'crossentropy'):
+            loss = layers.CrossEntropyLoss(
+                class_weights=class_weights,
+                boundary_weights=5,
+                boundary_dist=1,
+                skip_background=True
+            )([labels_gt, last_tensor])
+
+        elif metric == 'moment':
+            loss = layers.MomentLoss(
+                class_weights=class_weights,
+                enable_checks=True
+            )([labels_gt, last_tensor])
+
+        elif metric == 'wl2':
+            loss = layers.WeightedL2Loss(target_value=5)([labels_gt, last_tensor])
+
+        else:
+            raise Exception('metrics should be dice, ce, moment or wl2, got {}'.format(metric))
+
+        # apply scalar weight and keep for logging
+        weighted = KL.Lambda(lambda x: weight * x, name='{}_weighted'.format(metric))(loss)
+        weighted_losses.append(weighted)
+
+    # sum all terms
+    if len(weighted_losses) == 1:
+        total_loss = weighted_losses[0]
     else:
-        raise Exception('metrics should either be "dice or "wl2, got {}'.format(metrics))
+        total_loss = KL.Add(name='total_loss')(weighted_losses)
 
-    # create the model and return
-    model = Model(inputs=input_model.inputs, outputs=last_tensor)
+    # create the model
+    model = Model(inputs=input_model.inputs, outputs=total_loss)
+
+    # log each component separately (optional but recommended)
+    for metric, weighted_loss in zip(metrics, weighted_losses):
+        model.add_metric(weighted_loss, name='{}_loss'.format(metric), aggregation='mean')
+
     return model
 
 

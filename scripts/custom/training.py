@@ -1,9 +1,9 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: dice.entropy.loss
+Version: dice.moment.loss
 Changelog:
-- dice + entropy loss for compound error metrics
+- dice + moment loss for compound error metrics
 -LR: 1e-4 to 1e-6 (plateau)
 #######
 """
@@ -33,7 +33,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'dice.entropy.loss'
+version = 'dice.moment.loss'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -197,6 +197,6 @@ training(TRAIN,
          prior_stds=stds,
          label_weights=label_weights,
          hd95_weight=hd95_weight,
-         metric_type=['dice','ce'],      # 'dice', ['dice','moment'], ['dice','ce']
-         loss_weights=[1.0, 0.1]                   # e.g. [1.0, 0.1]
+         metric_type=['dice','moment'],      # 'dice', ['dice','moment'], ['dice','ce']
+         loss_weights=[1.0, 0.01]                   # e.g. [1.0, 0.1]
          )

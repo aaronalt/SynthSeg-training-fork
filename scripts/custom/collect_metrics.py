@@ -25,6 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from metrics_merge import merge_metrics_npy, summarize_per_epoch, plot_loss_curves
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+from SynthSeg.evaluate import compute_non_parametric_paired_test, cohens_d
+
+
 DEFAULT_SEG_ROOT = '/home/althause/data/seg'
 IGNORE_METADATA_COLS = {'subject', 'label', 'structure', 'id', 'unnamed: 0'}
 
@@ -198,6 +203,45 @@ def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
     return out_path
 
 
+def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_names=('138', '139'),
+                          alternative='two-sided', out_dir=None):
+    """Paired Wilcoxon test + Cohen's d between two seg folders evaluated on the same subjects."""
+    ref = np.load(Path(folder_ref) / f'{metric}.npy')
+    cmp = np.load(Path(folder_cmp) / f'{metric}.npy')
+    assert ref.shape == cmp.shape, f'shape mismatch {ref.shape} vs {cmp.shape} (same subjects/order?)'
+
+    # each subject has only one hemisphere: the absent label has dice == 0 in both runs
+    dice_ref = np.load(Path(folder_ref) / 'dice.npy')
+    dice_cmp = np.load(Path(folder_cmp) / 'dice.npy')
+    present = (dice_ref != 0) | (dice_cmp != 0)
+
+    rows = []
+    for i, name in enumerate(eval_label_names):
+        x, y = ref[i, present[i]], cmp[i, present[i]]
+        p = compute_non_parametric_paired_test(x, y, alternative=alternative)[0]  # 1d input -> single p
+        d = cohens_d(x, y)
+        rows.append({'label': name, 'n': len(x), 'mean_ref': x.mean(), 'mean_cmp': y.mean(),
+                     'p_wilcoxon': p, 'cohens_d': d})
+
+    # pooled: one value per subject (its present hemisphere)
+    x = np.where(present, ref, 0).sum(axis=0)
+    y = np.where(present, cmp, 0).sum(axis=0)
+    rows.append({'label': 'pooled', 'n': len(x), 'mean_ref': x.mean(), 'mean_cmp': y.mean(),
+                 'p_wilcoxon': compute_non_parametric_paired_test(x, y, alternative=alternative)[0],
+                 'cohens_d': cohens_d(x, y)})
+
+    df = pd.DataFrame(rows)
+    print(f'\n{metric}: {folder_ref}  vs  {folder_cmp}')
+    print(df.to_string(index=False))
+
+    out_dir = Path(out_dir) if out_dir else Path(folder_cmp)
+    out_path = out_dir / f'compare_{metric}.csv'
+    df.insert(0, 'folder_cmp', str(folder_cmp))
+    df.insert(0, 'folder_ref', str(folder_ref))
+    df.to_csv(out_path, index=False)
+    print(f'Wrote {out_path}')
+    return df
+
 if __name__ == '__main__':
     argv = sys.argv[1:]
 
@@ -244,3 +288,13 @@ if __name__ == '__main__':
     if models_dir and not loss_plotted:
         plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')
+
+    # Parse --compare REF_DIR CMP_DIR (paired stats between two seg folders, then exit)
+    if '--compare' in argv:
+        i = argv.index('--compare')
+        ref_dir, cmp_dir = argv[i + 1], argv[i + 2]
+        del argv[i:i + 3]
+        for metric in ('dice', 'precision', 'recall'):
+            if (Path(ref_dir) / f'{metric}.npy').exists():
+                compare_segmentations(ref_dir, cmp_dir, metric=metric)
+

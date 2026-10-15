@@ -259,6 +259,16 @@ if __name__ == '__main__':
         use_mauri = True
         del argv[i]
 
+    # Parse --compare REF_DIR CMP_DIR (paired stats between two seg folders, then exit)
+    if '--compare' in argv:
+        i = argv.index('--compare')
+        ref_dir, cmp_dir = argv[i + 1], argv[i + 2]
+        del argv[i:i + 3]
+        for metric in ('dice', 'precision', 'recall'):
+            if (Path(ref_dir) / f'{metric}.npy').exists():
+                compare_segmentations(ref_dir, cmp_dir, metric=metric)
+        sys.exit(0)
+
     args = argv or [DEFAULT_SEG_ROOT]
     n_written = 0
     loss_plotted = False
@@ -288,13 +298,4 @@ if __name__ == '__main__':
     if models_dir and not loss_plotted:
         plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')
-
-    # Parse --compare REF_DIR CMP_DIR (paired stats between two seg folders, then exit)
-    if '--compare' in argv:
-        i = argv.index('--compare')
-        ref_dir, cmp_dir = argv[i + 1], argv[i + 2]
-        del argv[i:i + 3]
-        for metric in ('dice', 'precision', 'recall'):
-            if (Path(ref_dir) / f'{metric}.npy').exists():
-                compare_segmentations(ref_dir, cmp_dir, metric=metric)
 

@@ -264,9 +264,19 @@ if __name__ == '__main__':
         i = argv.index('--compare')
         ref_dir, cmp_dir = argv[i + 1], argv[i + 2]
         del argv[i:i + 3]
+        n_compared = 0
         for metric in ('dice', 'precision', 'recall'):
-            if (Path(ref_dir) / f'{metric}.npy').exists():
-                compare_segmentations(ref_dir, cmp_dir, metric=metric)
+            missing = [d for d in (ref_dir, cmp_dir) if not (Path(d) / f'{metric}.npy').exists()]
+            if missing:
+                print(f'Skipping {metric}: no {metric}.npy in {", ".join(missing)}')
+                continue
+            compare_segmentations(ref_dir, cmp_dir, metric=metric)
+            n_compared += 1
+        if not n_compared:
+            for d in (ref_dir, cmp_dir):
+                print(f'\n.npy files under {d}:')
+                for f in sorted(Path(d).rglob('*.npy')):
+                    print(f'  {f.relative_to(d)}')
         sys.exit(0)
 
     args = argv or [DEFAULT_SEG_ROOT]

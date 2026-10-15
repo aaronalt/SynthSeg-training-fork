@@ -78,10 +78,15 @@ def merge_metrics_npy(path_segm, eval_label_names=('138', '139')):
 
 def _epoch_of(folder):
     """Epoch number parsed from a checkpoint folder name (first digit group, e.g.
-    dice_finetune_005_20 -> 5), else None."""
+    dice_finetune_005_20 -> 5). Falls back to parent folder names for digit-less subfolders
+    (e.g. <checkpoint>/mauri), else None."""
     import re
-    digits = re.sub('[^0-9]', ' ', Path(folder).name).split()
-    return int(digits[0]) if digits else None
+    path = Path(folder)
+    for part in [path.name] + [p.name for p in path.parents]:
+        digits = re.sub('[^0-9]', ' ', part).split()
+        if digits:
+            return int(digits[0])
+    return None
 
 
 def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
@@ -136,7 +141,10 @@ def summarize_per_epoch(folders, out_dir=None, eval_label_names=('138', '139')):
     print('\nBest epoch per metric (by mean of both labels):')
     for name in metrics_order:
         sub = df[df.metric == name].groupby('epoch')['mean'].mean()
-        best = sub.idxmax() if name in MAXIMIZE_METRICS else sub.idxmin()
+        if sub.empty:
+            print(f'  {name:<15}no epoch number parsed from folder names')
+            continue
+        best =sub.idxmax() if name in MAXIMIZE_METRICS else sub.idxmin()
         print(f'  {name:<15}epoch {best} ({sub[best]:.4f})')
 
     if out_dir is None:

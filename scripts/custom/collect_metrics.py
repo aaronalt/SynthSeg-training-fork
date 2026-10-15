@@ -3,7 +3,9 @@ Collect evaluation metrics (.npy: dice, hausdorff, hausdorff_95/99, mean_distanc
 metrics.csv (wide) and metrics_tidy.csv (long) WITHOUT re-running prediction or evaluation.
 
 Usage:
-    python collect_metrics.py [--models MODEL_DIR] [path ...]
+    python collect_metrics.py [--models MODEL_DIR] [--baseline SEG_DIR] [--gt GT_DIR]
+                              [--best-metric METRIC] [--no-compare] [path ...]
+    python collect_metrics.py --compare REF_DIR CMP_DIR
 
 Each path argument can be:
   - a checkpoint seg folder containing .npy files (processed directly), or
@@ -11,9 +13,21 @@ Each path argument can be:
     (e.g. /home/althause/data/seg/<experiment> sweeps all its checkpoint folders).
 With no path arguments, sweeps the default segmentation root /home/althause/data/seg.
 
+For each path, after collecting all checkpoints:
+  1. merges metrics.csv / metrics_tidy.csv per checkpoint, per-epoch summary, extended summary;
+  2. picks the best checkpoint (highest mean --best-metric, default dice);
+  3. evaluates the best checkpoint's segmentations and the baseline segmentations (--baseline,
+     default Mauri's model) against the same GT (--gt) with identical resampling and subject order
+     (eval_seg_vs_gt.py), into <path>/comparison/{best,baseline};
+  4. runs paired Wilcoxon tests + Cohen's d for every metric (baseline = reference) and writes
+     <path>/comparison/comparison_summary.csv (plus one compare_<metric>.csv per metric).
+--no-compare skips steps 2-4 (they are also skipped with --mauri).
+
 --models MODEL_DIR additionally plots training/validation loss curves from the
 TensorBoard event files under MODEL_DIR (e.g. the experiment's model folder containing
 logs/train and logs/validation) and writes loss_curves.png there.
+
+--compare REF_DIR CMP_DIR only compares two folders that already hold metric .npy files, then exits.
 """
 import os
 import sys
@@ -23,7 +37,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from metrics_merge import merge_metrics_npy, summarize_per_epoch, plot_loss_curves
+from metrics_merge import (merge_metrics_npy, summarize_per_epoch, plot_loss_curves,
+                           MAXIMIZE_METRICS, MINIMIZE_METRICS)
+from eval_seg_vs_gt import eval_seg_vs_gt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -31,15 +47,20 @@ from SynthSeg.evaluate import compute_non_parametric_paired_test, cohens_d
 
 
 DEFAULT_SEG_ROOT = '/home/althause/data/seg'
+DEFAULT_BASELINE_SEG = '/home/althause/data/claustrum_gt/mauri_3t'  # Mauri's model segmentations
+DEFAULT_GT = '/home/althause/data/claustrum_gt/3T/T1_all'           # manual 3T labels
+COMPARISON_DIRNAME = 'comparison'
 IGNORE_METADATA_COLS = {'subject', 'label', 'structure', 'id', 'unnamed: 0'}
 
 
 def find_seg_folders(path):
-    """Return [path] if it directly contains .npy files, else its subfolders that do."""
+    """Return [path] if it directly contains .npy files, else its subfolders that do
+    (skipping comparison/ outputs written by this script)."""
     path = Path(path)
     if list(path.glob('*.npy')):
         return [path]
-    return sorted(d for d in path.rglob('*') if d.is_dir() and list(d.glob('*.npy')))
+    return sorted(d for d in path.rglob('*') if d.is_dir() and list(d.glob('*.npy'))
+                  and COMPARISON_DIRNAME not in d.relative_to(path).parts)
 
 
 def filter_hemisphere_mismatches(df):
@@ -242,42 +263,133 @@ def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_name
     print(f'Wrote {out_path}')
     return df
 
+
+ALL_METRICS = MAXIMIZE_METRICS + MINIMIZE_METRICS
+
+
+def run_comparison(ref_dir, cmp_dir, out_dir=None):
+    """compare_segmentations for every metric present in both folders. Writes compare_<metric>.csv
+    files and comparison_summary.csv (all metrics, Bonferroni-adjusted p over the metrics compared,
+    and which side is better) into out_dir (default cmp_dir). Returns the summary DataFrame or None."""
+    out_dir = Path(out_dir) if out_dir else Path(cmp_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tables = []
+    for metric in ALL_METRICS:
+        missing = [d for d in (ref_dir, cmp_dir) if not (Path(d) / f'{metric}.npy').exists()]
+        if missing:
+            print(f'Skipping {metric}: no {metric}.npy in {", ".join(map(str, missing))}')
+            continue
+        df = compare_segmentations(ref_dir, cmp_dir, metric=metric, out_dir=out_dir)
+        df.insert(2, 'metric', metric)
+        tables.append(df)
+    if not tables:
+        for d in (ref_dir, cmp_dir):
+            print(f'\n.npy files under {d}:')
+            for f in sorted(Path(d).rglob('*.npy')):
+                print(f'  {f.relative_to(d)}')
+        return None
+
+    summary = pd.concat(tables, ignore_index=True)
+    summary['p_bonferroni'] = (summary['p_wilcoxon'] * len(tables)).clip(upper=1.0)
+    higher_is_better = summary['metric'].isin(MAXIMIZE_METRICS)
+    cmp_wins = np.where(higher_is_better, summary['mean_cmp'] > summary['mean_ref'],
+                        summary['mean_cmp'] < summary['mean_ref'])
+    summary['better'] = np.where(summary['mean_cmp'] == summary['mean_ref'], 'tie',
+                                 np.where(cmp_wins, 'cmp', 'ref'))
+    out_path = out_dir / 'comparison_summary.csv'
+    summary.to_csv(out_path, index=False)
+
+    pooled = summary[summary['label'] == 'pooled']
+    print(f'\n=== Comparison summary (pooled; ref = {ref_dir}, cmp = {cmp_dir}) ===')
+    print(pooled[['metric', 'n', 'mean_ref', 'mean_cmp', 'p_wilcoxon', 'p_bonferroni', 'cohens_d', 'better']]
+          .to_string(index=False, float_format=lambda v: f'{v:.4f}'))
+    print(f'Wrote {out_path}')
+    return summary
+
+
+def pick_best_folder(folders, metric='dice'):
+    """Checkpoint folder with the best mean `metric` (present labels only, averaged over labels).
+    Returns (folder, score) or (None, None)."""
+    scores = {}
+    for folder in folders:
+        metric_file, dice_file = Path(folder) / f'{metric}.npy', Path(folder) / 'dice.npy'
+        if not (metric_file.exists() and dice_file.exists()):
+            continue
+        arr, present = np.load(metric_file), np.load(dice_file) != 0
+        if arr.ndim != 2 or arr.shape != present.shape:
+            continue
+        per_label = [arr[i][present[i]].mean() for i in range(arr.shape[0]) if present[i].any()]
+        if per_label:
+            scores[str(folder)] = float(np.mean(per_label))
+    if not scores:
+        return None, None
+    best = (min if metric in MINIMIZE_METRICS else max)(scores, key=scores.get)
+    return best, scores[best]
+
+
+def _subject_keys(eval_dir):
+    with open(Path(eval_dir) / 'subjects.txt') as f:
+        return [tuple(line.split('\t')[:2]) for line in f if line.strip()]
+
+
+def compare_best_to_baseline(sweep_path, folders, baseline_seg, gt_dir, best_metric='dice'):
+    """Pick the best checkpoint among folders, evaluate it and the baseline against gt_dir with identical
+    resampling/ordering, then run_comparison(baseline, best). Outputs go to <sweep_path>/comparison/."""
+    for name, d in (('baseline', baseline_seg), ('GT', gt_dir)):
+        if not Path(d).is_dir():
+            print(f'\nSkipping comparison: {name} folder {d} not found (set it with --{name.lower()}).')
+            return None
+
+    best, score = pick_best_folder(folders, best_metric)
+    if best is None:
+        print(f'\nSkipping comparison: no {best_metric}.npy found to pick a best checkpoint.')
+        return None
+    print(f'\nBest checkpoint by mean {best_metric}: {best} ({score:.4f})')
+
+    sweep_path = Path(sweep_path)
+    root = (sweep_path.parent if sweep_path in map(Path, folders) else sweep_path) / COMPARISON_DIRNAME
+    best_eval, baseline_eval = root / Path(best).name, root / 'baseline'
+
+    print(f'\n--- Evaluating best checkpoint against {gt_dir} ---')
+    eval_seg_vs_gt(best, gt_dir, best_eval)
+    print(f'\n--- Evaluating baseline {baseline_seg} against {gt_dir} ---')
+    eval_seg_vs_gt(baseline_seg, gt_dir, baseline_eval)
+
+    if _subject_keys(best_eval) != _subject_keys(baseline_eval):
+        print(f'\nSkipping statistics: subjects differ between {best_eval}/subjects.txt and '
+              f'{baseline_eval}/subjects.txt, so the paired tests would be invalid.')
+        return None
+    with open(root / 'selection.txt', 'w') as f:
+        f.write(f'best_checkpoint\t{best}\nselected_by\tmean {best_metric} = {score:.6f}\n'
+                f'baseline\t{baseline_seg}\ngt\t{gt_dir}\n')
+    return run_comparison(baseline_eval, best_eval, out_dir=root)
+
+
+def _pop_flag(argv, flag, n_values=1, default=None):
+    """Remove `flag` and its values from argv; returns the value(s), True for n_values=0, or default."""
+    if flag not in argv:
+        return default
+    i = argv.index(flag)
+    values = argv[i + 1:i + 1 + n_values]
+    del argv[i:i + 1 + n_values]
+    return True if n_values == 0 else (values[0] if n_values == 1 else values)
+
+
 if __name__ == '__main__':
     argv = sys.argv[1:]
 
-    # Parse --models flag
-    models_dir = None
-    if '--models' in argv:
-        i = argv.index('--models')
-        models_dir = argv[i + 1]
-        del argv[i:i + 2]
-
-    # Parse --mauri flag (turns mauri subfolder search ON)
-    use_mauri = False
-    if '--mauri' in argv:
-        i = argv.index('--mauri')
-        use_mauri = True
-        del argv[i]
-
-    # Parse --compare REF_DIR CMP_DIR (paired stats between two seg folders, then exit)
-    if '--compare' in argv:
-        i = argv.index('--compare')
-        ref_dir, cmp_dir = argv[i + 1], argv[i + 2]
-        del argv[i:i + 3]
-        n_compared = 0
-        for metric in ('dice', 'precision', 'recall', 'hausdorff_95', 'hausdorff', 'hausdorff_99', 'mean_distance'):
-            missing = [d for d in (ref_dir, cmp_dir) if not (Path(d) / f'{metric}.npy').exists()]
-            if missing:
-                print(f'Skipping {metric}: no {metric}.npy in {", ".join(missing)}')
-                continue
-            compare_segmentations(ref_dir, cmp_dir, metric=metric)
-            n_compared += 1
-        if not n_compared:
-            for d in (ref_dir, cmp_dir):
-                print(f'\n.npy files under {d}:')
-                for f in sorted(Path(d).rglob('*.npy')):
-                    print(f'  {f.relative_to(d)}')
+    # --compare REF_DIR CMP_DIR: paired stats between two folders that already hold metric .npy files
+    compare_dirs = _pop_flag(argv, '--compare', n_values=2)
+    if compare_dirs:
+        run_comparison(*compare_dirs)
         sys.exit(0)
+
+    models_dir = _pop_flag(argv, '--models')
+    use_mauri = _pop_flag(argv, '--mauri', n_values=0, default=False)  # sweep <checkpoint>/mauri subfolders
+    baseline_seg = _pop_flag(argv, '--baseline', default=DEFAULT_BASELINE_SEG)
+    gt_dir = _pop_flag(argv, '--gt', default=DEFAULT_GT)
+    best_metric = _pop_flag(argv, '--best-metric', default='dice')
+    do_compare = not _pop_flag(argv, '--no-compare', n_values=0, default=False) and not use_mauri
 
     args = argv or [DEFAULT_SEG_ROOT]
     n_written = 0
@@ -305,7 +417,8 @@ if __name__ == '__main__':
                 plot_loss_curves(models_dir,
                                  out_dir=os.path.commonpath([str(f) for f in folders]))
                 loss_plotted = True
+            if do_compare:
+                compare_best_to_baseline(arg, folders, baseline_seg, gt_dir, best_metric)
     if models_dir and not loss_plotted:
         plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')
-

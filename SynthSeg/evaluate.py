@@ -270,15 +270,18 @@ def evaluation(gt_dir,
     :param verbose: (optional) whether to print out info about the remaining number of cases.
     """
 
-    # check whether to recompute
-    compute_dice = not os.path.isfile(path_dice) if (path_dice is not None) else True
-    compute_hausdorff = not os.path.isfile(path_hausdorff) if (path_hausdorff is not None) else False
-    compute_hausdorff_99 = not os.path.isfile(path_hausdorff_99) if (path_hausdorff_99 is not None) else False
-    compute_hausdorff_95 = not os.path.isfile(path_hausdorff_95) if (path_hausdorff_95 is not None) else False
-    compute_mean_dist = not os.path.isfile(path_mean_distance) if (path_mean_distance is not None) else False
-    compute_precision = not os.path.isfile(path_precision) if (path_precision is not None) else False
-    compute_recall = not os.path.isfile(path_recall) if (path_recall is not None) else False
+    # check whether to recompute (recompute=True recomputes every requested metric, even if its file exists)
+    def needs(path, default):
+        return (recompute or not os.path.isfile(path)) if (path is not None) else default
+    compute_dice = needs(path_dice, True)
+    compute_hausdorff = needs(path_hausdorff, False)
+    compute_hausdorff_99 = needs(path_hausdorff_99, False)
+    compute_hausdorff_95 = needs(path_hausdorff_95, False)
+    compute_mean_dist = needs(path_mean_distance, False)
+    compute_precision = needs(path_precision, False)
+    compute_recall = needs(path_recall, False)
     compute_hd = [compute_hausdorff, compute_hausdorff_99, compute_hausdorff_95]
+    compute_distances = any(compute_hd) | compute_mean_dist
 
     if compute_dice | any(compute_hd) | compute_mean_dist | compute_precision | compute_recall | recompute:
 
@@ -412,7 +415,7 @@ def evaluation(gt_dir,
                 temp_gt = temp_seg = None
 
             # compute average and Hausdorff distances
-            if any(compute_hd) | compute_mean_dist:
+            if compute_distances:
 
                 # compute unique label values
                 unique_gt_labels = np.unique(gt_labels)
@@ -451,15 +454,15 @@ def evaluation(gt_dir,
         if path_recall is not None:
             utils.mkdir(os.path.dirname(path_recall))
             np.save(path_recall, recall_coefs)
-        if path_hausdorff is not None:
+        if path_hausdorff is not None and compute_distances:  # never overwrite with unfilled zeros
             utils.mkdir(os.path.dirname(path_hausdorff))
             np.save(path_hausdorff, max_dists[..., 0])
-        if path_hausdorff_99 is not None:
+        if path_hausdorff_99 is not None and compute_distances:  # never overwrite with unfilled zeros
             utils.mkdir(os.path.dirname(path_hausdorff_99))
             np.save(path_hausdorff_99, max_dists[..., 1])
-        if path_hausdorff_95 is not None:
+        if path_hausdorff_95 is not None and compute_distances:  # never overwrite with unfilled zeros
             utils.mkdir(os.path.dirname(path_hausdorff_95))
             np.save(path_hausdorff_95, max_dists[..., 2])
-        if path_mean_distance is not None:
+        if path_mean_distance is not None and compute_distances:  # never overwrite with unfilled zeros
             utils.mkdir(os.path.dirname(path_mean_distance))
             np.save(path_mean_distance, mean_dists)

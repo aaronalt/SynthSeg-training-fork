@@ -224,6 +224,19 @@ def compute_extended_summary(folders, out_dir=None, hd_threshold=30.0):
     return out_path
 
 
+def _paired_p(x, y, alternative='two-sided', what=''):
+    """Wilcoxon p-value via compute_non_parametric_paired_test. NaN (with a warning) when every paired
+    difference is zero, which scipy cannot test and which for two different models usually means the
+    arrays are wrong (e.g. unfilled zeros), and NaN for fewer than 2 pairs."""
+    if len(x) < 2:
+        return np.nan
+    if np.all(x == y):
+        print(f'WARNING: {what}: identical values for all {len(x)} pairs ({np.unique(x)[:5]}...); '
+              f'p set to NaN. Check the .npy files, this is unlikely for two different segmentations.')
+        return np.nan
+    return compute_non_parametric_paired_test(x, y, alternative=alternative)[0]  # 1d input -> single p
+
+
 def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_names=('138', '139'),
                           alternative='two-sided', out_dir=None):
     """Paired Wilcoxon test + Cohen's d between two seg folders evaluated on the same subjects."""
@@ -239,17 +252,17 @@ def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_name
     rows = []
     for i, name in enumerate(eval_label_names):
         x, y = ref[i, present[i]], cmp[i, present[i]]
-        p = compute_non_parametric_paired_test(x, y, alternative=alternative)[0]  # 1d input -> single p
+        p = _paired_p(x, y, alternative, f'{metric} label {name}')
         d = cohens_d(x, y)
         rows.append({'label': name, 'n': len(x), 'mean_ref': x.mean(), 'mean_cmp': y.mean(),
-                     'p_wilcoxon': p, 'cohens_d': d})
+                     'p_wilcoxon': p, 'cohens_d': d, 'n_identical': int(np.sum(x == y))})
 
     # pooled: one value per subject (its present hemisphere)
     x = np.where(present, ref, 0).sum(axis=0)
     y = np.where(present, cmp, 0).sum(axis=0)
     rows.append({'label': 'pooled', 'n': len(x), 'mean_ref': x.mean(), 'mean_cmp': y.mean(),
-                 'p_wilcoxon': compute_non_parametric_paired_test(x, y, alternative=alternative)[0],
-                 'cohens_d': cohens_d(x, y)})
+                 'p_wilcoxon': _paired_p(x, y, alternative, f'{metric} pooled'),
+                 'cohens_d': cohens_d(x, y), 'n_identical': int(np.sum(x == y))})
 
     df = pd.DataFrame(rows)
     print(f'\n{metric}: {folder_ref}  vs  {folder_cmp}')

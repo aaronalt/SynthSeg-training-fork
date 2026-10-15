@@ -3,8 +3,8 @@ Collect evaluation metrics (.npy: dice, hausdorff, hausdorff_95/99, mean_distanc
 metrics.csv (wide) and metrics_tidy.csv (long) WITHOUT re-running prediction or evaluation.
 
 Usage:
-    python collect_metrics.py [--models MODEL_DIR] [--baseline SEG_DIR] [--gt GT_DIR]
-                              [--best-metric METRIC] [--no-compare] [path ...]
+    python collect_metrics.py --models MODEL_DIR [--baseline SEG_DIR] [--gt GT_DIR]
+                              [--select val_loss|test] [--best-metric METRIC] [--no-compare] [path ...]
     python collect_metrics.py --compare REF_DIR CMP_DIR
 
 Each path argument can be:
@@ -15,7 +15,10 @@ With no path arguments, sweeps the default segmentation root /home/althause/data
 
 For each path, after collecting all checkpoints:
   1. merges metrics.csv / metrics_tidy.csv per checkpoint, per-epoch summary, extended summary;
-  2. picks the best checkpoint (highest mean --best-metric, default dice);
+  2. picks the best checkpoint: by default (--select val_loss) the predicted checkpoint with the lowest
+     validation loss in the TensorBoard logs under --models (VAL label maps, as monitored by EarlyStopping),
+     so the test set is not used for selection; --select test instead takes the highest mean
+     --best-metric on the test-set results (biased, kept for exploration);
   3. evaluates the best checkpoint's segmentations and the baseline segmentations (--baseline,
      default Mauri's model) against the same GT (--gt) with identical resampling and subject order
      (eval_seg_vs_gt.py), into <path>/comparison/{best,baseline};
@@ -37,8 +40,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from metrics_merge import (merge_metrics_npy, summarize_per_epoch, plot_loss_curves,
-                           MAXIMIZE_METRICS, MINIMIZE_METRICS)
+from metrics_merge import (merge_metrics_npy, summarize_per_epoch, plot_loss_curves, _read_tb_scalars,
+                           _epoch_of, MAXIMIZE_METRICS, MINIMIZE_METRICS)
 from eval_seg_vs_gt import eval_seg_vs_gt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -340,24 +343,70 @@ def pick_best_folder(folders, metric='dice'):
     return best, scores[best]
 
 
+VAL_LOSS_TAGS = ('epoch_dice_loss', 'epoch_loss', 'val_dice_loss', 'val_loss', 'loss')
+
+
+def pick_best_by_val_loss(folders, models_dir):
+    """Checkpoint folder with the lowest validation loss in the TensorBoard logs under models_dir
+    (synthetic images generated from the VAL label maps, the quantity EarlyStopping monitors).
+    Keras checkpoint names use 1-based epochs ({epoch:03d}), TensorBoard steps are 0-based.
+    Returns (folder, loss, tag) or (None, None, reason)."""
+    if not models_dir or not Path(models_dir).is_dir():
+        return None, None, f'--models directory not given or not found ({models_dir})'
+    event_files = [f for f in Path(models_dir).rglob('events.out.tfevents.*') if 'val' in f.parent.name.lower()]
+    if not event_files:
+        return None, None, f'no validation TensorBoard logs (logs/validation/) under {models_dir}'
+    series, seen = _read_tb_scalars(event_files, tags=VAL_LOSS_TAGS)
+    tag = next((t for t in VAL_LOSS_TAGS if t in series), None)
+    if tag is None:
+        return None, None, f'no validation loss tag among {VAL_LOSS_TAGS}; tags seen: {sorted(seen)}'
+    loss_per_epoch = {step + 1: value for step, value in sorted(series[tag])}  # resumed runs: last value wins
+    candidates = {str(f): loss_per_epoch[_epoch_of(f)] for f in folders if _epoch_of(f) in loss_per_epoch}
+    if not candidates:
+        return None, None, (f'no checkpoint folder epoch matches the logged epochs '
+                            f'{min(loss_per_epoch)}-{max(loss_per_epoch)}')
+    best = min(candidates, key=candidates.get)
+    print(f'\nValidation loss ({tag}) per predicted checkpoint:')
+    for f in sorted(candidates, key=_epoch_of):
+        print(f'  epoch {_epoch_of(f):4d}  {candidates[f]:.4f}{"  <- best" if f == best else ""}')
+    overall = min(loss_per_epoch, key=loss_per_epoch.get)
+    if loss_per_epoch[overall] < candidates[best]:
+        print(f'WARNING: the lowest logged validation loss is at epoch {overall} '
+              f'({loss_per_epoch[overall]:.4f}), which has no prediction folder; run prediction for it.')
+    return best, candidates[best], tag
+
+
 def _subject_keys(eval_dir):
     with open(Path(eval_dir) / 'subjects.txt') as f:
         return [tuple(line.split('\t')[:2]) for line in f if line.strip()]
 
 
-def compare_best_to_baseline(sweep_path, folders, baseline_seg, gt_dir, best_metric='dice'):
-    """Pick the best checkpoint among folders, evaluate it and the baseline against gt_dir with identical
-    resampling/ordering, then run_comparison(baseline, best). Outputs go to <sweep_path>/comparison/."""
+def compare_best_to_baseline(sweep_path, folders, baseline_seg, gt_dir, best_metric='dice',
+                             select='val_loss', models_dir=None):
+    """Pick the best checkpoint among folders (select='val_loss': lowest validation loss in the TensorBoard
+    logs under models_dir, independent of the test set; select='test': best mean best_metric on the swept
+    test-set results, which biases the final comparison), evaluate it and the baseline against gt_dir with
+    identical resampling/ordering, then run_comparison(baseline, best). Outputs go to <sweep_path>/comparison/."""
     for name, d in (('baseline', baseline_seg), ('GT', gt_dir)):
         if not Path(d).is_dir():
             print(f'\nSkipping comparison: {name} folder {d} not found (set it with --{name.lower()}).')
             return None
 
-    best, score = pick_best_folder(folders, best_metric)
-    if best is None:
-        print(f'\nSkipping comparison: no {best_metric}.npy found to pick a best checkpoint.')
-        return None
-    print(f'\nBest checkpoint by mean {best_metric}: {best} ({score:.4f})')
+    if select == 'val_loss':
+        best, score, tag = pick_best_by_val_loss(folders, models_dir)
+        if best is None:
+            print(f'\nSkipping comparison: cannot select on validation loss: {tag}. '
+                  f'Pass --models MODEL_DIR, or --select test to select on the test set (biased).')
+            return None
+        selected_by = f'validation loss {tag} = {score:.6f} (TensorBoard logs under {models_dir})'
+    else:
+        best, score = pick_best_folder(folders, best_metric)
+        if best is None:
+            print(f'\nSkipping comparison: no {best_metric}.npy found to pick a best checkpoint.')
+            return None
+        selected_by = f'TEST-SET mean {best_metric} = {score:.6f} (biased: same subjects as the comparison)'
+        print('\nWARNING: selecting the checkpoint on the test set; the comparison below is optimistic.')
+    print(f'\nBest checkpoint: {best}\n  selected by {selected_by}')
 
     sweep_path = Path(sweep_path)
     root = (sweep_path.parent if sweep_path in map(Path, folders) else sweep_path) / COMPARISON_DIRNAME
@@ -373,7 +422,7 @@ def compare_best_to_baseline(sweep_path, folders, baseline_seg, gt_dir, best_met
               f'{baseline_eval}/subjects.txt, so the paired tests would be invalid.')
         return None
     with open(root / 'selection.txt', 'w') as f:
-        f.write(f'best_checkpoint\t{best}\nselected_by\tmean {best_metric} = {score:.6f}\n'
+        f.write(f'best_checkpoint\t{best}\nselected_by\t{selected_by}\n'
                 f'baseline\t{baseline_seg}\ngt\t{gt_dir}\n')
     return run_comparison(baseline_eval, best_eval, out_dir=root)
 
@@ -401,7 +450,10 @@ if __name__ == '__main__':
     use_mauri = _pop_flag(argv, '--mauri', n_values=0, default=False)  # sweep <checkpoint>/mauri subfolders
     baseline_seg = _pop_flag(argv, '--baseline', default=DEFAULT_BASELINE_SEG)
     gt_dir = _pop_flag(argv, '--gt', default=DEFAULT_GT)
-    best_metric = _pop_flag(argv, '--best-metric', default='dice')
+    best_metric = _pop_flag(argv, '--best-metric', default='dice')  # only used with --select test
+    select = _pop_flag(argv, '--select', default='val_loss')
+    if select not in ('val_loss', 'test'):
+        sys.exit(f'--select must be val_loss or test, got {select}')
     do_compare = not _pop_flag(argv, '--no-compare', n_values=0, default=False) and not use_mauri
 
     args = argv or [DEFAULT_SEG_ROOT]
@@ -431,7 +483,7 @@ if __name__ == '__main__':
                                  out_dir=os.path.commonpath([str(f) for f in folders]))
                 loss_plotted = True
             if do_compare:
-                compare_best_to_baseline(arg, folders, baseline_seg, gt_dir, best_metric)
+                compare_best_to_baseline(arg, folders, baseline_seg, gt_dir, best_metric, select, models_dir)
     if models_dir and not loss_plotted:
         plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')

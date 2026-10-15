@@ -50,9 +50,9 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261014_171259_dice.hd95.loss'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260922_111744'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
-model_files = model_files[37:39]
+# model_files = model_files[37:39]
 
 # Ground truth directories for evaluation
 gt_dirs = {
@@ -150,8 +150,8 @@ for path_model in model_files:
     n_channels = trained_model_params.get('n_channels')
 
     # comment out to run predictions on mauri segmentations
-    # path_gt = '/home/althause/data/claustrum_gt/3T'
-    path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
+    path_gt = '/home/althause/data/claustrum_gt/3T'
+    # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below. Only clear the folder
     # this run writes to (mauri/ for mauri GT, top level otherwise), so the other GT's results survive.

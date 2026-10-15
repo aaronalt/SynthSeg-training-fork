@@ -150,11 +150,13 @@ for path_model in model_files:
     n_channels = trained_model_params.get('n_channels')
 
     # comment out to run predictions on mauri segmentations
-    path_gt = '/home/althause/data/claustrum_gt/3T'
-    # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
+    # path_gt = '/home/althause/data/claustrum_gt/3T'
+    path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
-    # Delete stale evaluation arrays so old results cannot be re-merged below
-    for stale_npy in sorted(Path(path_segm).rglob('*.npy')):
+    # Delete stale evaluation arrays so old results cannot be re-merged below. Only clear the folder
+    # this run writes to (mauri/ for mauri GT, top level otherwise), so the other GT's results survive.
+    eval_dir = Path(path_segm) / 'mauri' if 'mauri' in path_gt else Path(path_segm)
+    for stale_npy in sorted(eval_dir.glob('*.npy')):
         stale_npy.unlink()
 
     # Run prediction

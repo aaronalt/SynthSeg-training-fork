@@ -265,7 +265,7 @@ if __name__ == '__main__':
         ref_dir, cmp_dir = argv[i + 1], argv[i + 2]
         del argv[i:i + 3]
         n_compared = 0
-        for metric in ('dice', 'precision', 'recall'):
+        for metric in ('dice', 'precision', 'recall', 'hausdorff_95', 'hausdorff', 'hausdorff_99', 'mean_distance'):
             missing = [d for d in (ref_dir, cmp_dir) if not (Path(d) / f'{metric}.npy').exists()]
             if missing:
                 print(f'Skipping {metric}: no {metric}.npy in {", ".join(missing)}')

@@ -3,7 +3,8 @@ Collect evaluation metrics (.npy: dice, hausdorff, hausdorff_95/99, mean_distanc
 metrics.csv (wide) and metrics_tidy.csv (long) WITHOUT re-running prediction or evaluation.
 
 Usage:
-    python collect_metrics.py --models MODEL_DIR [--baseline SEG_DIR] [--gt GT_DIR]
+    python collect_metrics.py --models MODEL_DIR [--baseline SEG_DIR] [--gt GT_DIR] [--min-epoch N]
+                              [--seg-7t DIR] [--gt-7t DIR] [--baseline-7t DIR] [--no-sensitivity]
                               [--select val_loss|test] [--best-metric METRIC] [--no-compare] [path ...]
     python collect_metrics.py --compare REF_DIR CMP_DIR
 
@@ -13,18 +14,22 @@ Each path argument can be:
     (e.g. /home/althause/data/seg/<experiment> sweeps all its checkpoint folders).
 With no path arguments, sweeps the default segmentation root /home/althause/data/seg.
 
-For each path, after collecting all checkpoints:
+For each path (the 3T test predictions, prediction.py SPLIT='test3t'), after collecting all checkpoints:
   1. merges metrics.csv / metrics_tidy.csv per checkpoint, per-epoch summary, extended summary;
-  2. picks the best checkpoint: by default (--select val_loss) the predicted checkpoint with the lowest
-     validation loss in the TensorBoard logs under --models (VAL label maps, as monitored by EarlyStopping),
-     so the test set is not used for selection; --select test instead takes the highest mean
-     --best-metric on the test-set results (biased, kept for exploration);
-  3. evaluates the best checkpoint's segmentations and the baseline segmentations (--baseline,
-     default Mauri's model) against the same GT (--gt) with identical resampling and subject order
-     (eval_seg_vs_gt.py), into <path>/comparison/{best,baseline};
-  4. runs paired Wilcoxon tests + Cohen's d for every metric (baseline = reference) and writes
-     <path>/comparison/comparison_summary.csv (plus one compare_<metric>.csv per metric).
---no-compare skips steps 2-4 (they are also skipped with --mauri).
+  2. selects the final checkpoint WITHOUT real data: lowest synthetic validation loss (VAL_2 label maps, the
+     quantity EarlyStopping monitors) in the TensorBoard logs under --models, among epochs >= --min-epoch
+     (default 40, after the HD95 weight warm-up). --select test instead takes the best mean --best-metric
+     on the test results (biased, for exploration only);
+  3. 3T: evaluates the selected checkpoint and the baseline (--baseline, default Mauri's model) against
+     --gt on the same cases and writes paired Wilcoxon + Cohen's d for every metric to
+     <path>/comparison/comparison_summary.csv (plus compare_<metric>.csv);
+  4. 3T sensitivity: the same comparison (pooled Dice, mean distance) at every checkpoint with epoch
+     >= --min-epoch, in <path>/comparison/sensitivity_3t.csv (--no-sensitivity skips it);
+  5. 7T: if the selected checkpoint was predicted on the 7T scans (prediction.py SPLIT='test7t', under
+     --seg-7t, default /home/althause/data/seg_7t/<experiment name>), evaluates it against --gt-7t and
+     writes descriptive results to <path>/comparison_7t/; with --baseline-7t also compares with the
+     baseline's 7T segmentations.
+--no-compare skips steps 2-5 (they are also skipped with --mauri).
 
 --models MODEL_DIR additionally plots training/validation loss curves from the
 TensorBoard event files under MODEL_DIR (e.g. the experiment's model folder containing
@@ -52,18 +57,20 @@ from SynthSeg.evaluate import compute_non_parametric_paired_test, cohens_d
 DEFAULT_SEG_ROOT = '/home/althause/data/seg'
 DEFAULT_BASELINE_SEG = '/home/althause/data/claustrum_gt/mauri_3t'  # Mauri's model segmentations
 DEFAULT_GT = '/home/althause/data/claustrum_gt/3T/T1_all'           # manual 3T labels
+DEFAULT_SEG_7T_ROOT = '/home/althause/data/seg_7t'  # prediction.py SPLIT='test7t' output: <root>/<experiment>/<ckpt>
+DEFAULT_GT_7T = '/home/althause/data/claustrum_gt/7T'  # manual 7T labels
 COMPARISON_DIRNAME = 'comparison'
 IGNORE_METADATA_COLS = {'subject', 'label', 'structure', 'id', 'unnamed: 0'}
 
 
 def find_seg_folders(path):
     """Return [path] if it directly contains .npy files, else its subfolders that do
-    (skipping comparison/ outputs written by this script)."""
+    (skipping comparison*/ outputs written by this script)."""
     path = Path(path)
     if list(path.glob('*.npy')):
         return [path]
     return sorted(d for d in path.rglob('*') if d.is_dir() and list(d.glob('*.npy'))
-                  and COMPARISON_DIRNAME not in d.relative_to(path).parts)
+                  and not any(part.startswith(COMPARISON_DIRNAME) for part in d.relative_to(path).parts))
 
 
 def filter_hemisphere_mismatches(df):
@@ -240,9 +247,10 @@ def _paired_p(x, y, alternative='two-sided', what=''):
     return compute_non_parametric_paired_test(x, y, alternative=alternative)[0]  # 1d input -> single p
 
 
-def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_names=('138', '139'),
-                          alternative='two-sided', out_dir=None):
-    """Paired Wilcoxon test + Cohen's d between two seg folders evaluated on the same subjects."""
+def _compare_table(folder_ref, folder_cmp, metric='dice', eval_label_names=('138', '139'),
+                   alternative='two-sided'):
+    """Per-label and pooled paired Wilcoxon + Cohen's d between two folders evaluated on the same cases
+    (same column order), as a DataFrame. Nothing is printed or written."""
     ref = np.load(Path(folder_ref) / f'{metric}.npy')
     cmp = np.load(Path(folder_cmp) / f'{metric}.npy')
     assert ref.shape == cmp.shape, f'shape mismatch {ref.shape} vs {cmp.shape} (same subjects/order?)'
@@ -266,8 +274,14 @@ def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_name
     rows.append({'label': 'pooled', 'n': len(x), 'mean_ref': x.mean(), 'mean_cmp': y.mean(),
                  'p_wilcoxon': _paired_p(x, y, alternative, f'{metric} pooled'),
                  'cohens_d': cohens_d(x, y), 'n_identical': int(np.sum(x == y))})
+    return pd.DataFrame(rows)
 
-    df = pd.DataFrame(rows)
+
+def compare_segmentations(folder_ref, folder_cmp, metric='dice', eval_label_names=('138', '139'),
+                          alternative='two-sided', out_dir=None):
+    """Paired Wilcoxon test + Cohen's d between two seg folders evaluated on the same subjects; prints the
+    table and writes compare_<metric>.csv into out_dir (default folder_cmp)."""
+    df = _compare_table(folder_ref, folder_cmp, metric, eval_label_names, alternative)
     print(f'\n{metric}: {folder_ref}  vs  {folder_cmp}')
     print(df.to_string(index=False))
 
@@ -346,9 +360,10 @@ def pick_best_folder(folders, metric='dice'):
 VAL_LOSS_TAGS = ('epoch_dice_loss', 'epoch_loss', 'val_dice_loss', 'val_loss', 'loss')
 
 
-def pick_best_by_val_loss(folders, models_dir):
-    """Checkpoint folder with the lowest validation loss in the TensorBoard logs under models_dir
-    (synthetic images generated from the VAL label maps, the quantity EarlyStopping monitors).
+def pick_best_by_val_loss(folders, models_dir, min_epoch=0):
+    """Checkpoint folder (epoch >= min_epoch) with the lowest validation loss in the TensorBoard logs under
+    models_dir (synthetic images generated from the VAL label maps, the quantity EarlyStopping monitors).
+    min_epoch skips epochs whose loss is not comparable (e.g. during the HD95 weight warm-up).
     Keras checkpoint names use 1-based epochs ({epoch:03d}), TensorBoard steps are 0-based.
     Returns (folder, loss, tag) or (None, None, reason)."""
     if not models_dir or not Path(models_dir).is_dir():
@@ -360,71 +375,193 @@ def pick_best_by_val_loss(folders, models_dir):
     tag = next((t for t in VAL_LOSS_TAGS if t in series), None)
     if tag is None:
         return None, None, f'no validation loss tag among {VAL_LOSS_TAGS}; tags seen: {sorted(seen)}'
-    loss_per_epoch = {step + 1: value for step, value in sorted(series[tag])}  # resumed runs: last value wins
+    loss_per_epoch = {step + 1: value for step, value in sorted(series[tag])  # resumed runs: last value wins
+                      if step + 1 >= min_epoch}
+    if not loss_per_epoch:
+        return None, None, f'no logged validation loss at epoch >= {min_epoch}'
     candidates = {str(f): loss_per_epoch[_epoch_of(f)] for f in folders if _epoch_of(f) in loss_per_epoch}
     if not candidates:
         return None, None, (f'no checkpoint folder epoch matches the logged epochs '
-                            f'{min(loss_per_epoch)}-{max(loss_per_epoch)}')
+                            f'{min(loss_per_epoch)}-{max(loss_per_epoch)} (>= min epoch {min_epoch})')
     best = min(candidates, key=candidates.get)
-    print(f'\nValidation loss ({tag}) per predicted checkpoint:')
+    print(f'\nValidation loss ({tag}) per predicted checkpoint, epochs >= {min_epoch}:')
     for f in sorted(candidates, key=_epoch_of):
         print(f'  epoch {_epoch_of(f):4d}  {candidates[f]:.4f}{"  <- best" if f == best else ""}')
     overall = min(loss_per_epoch, key=loss_per_epoch.get)
     if loss_per_epoch[overall] < candidates[best]:
-        print(f'WARNING: the lowest logged validation loss is at epoch {overall} '
+        print(f'WARNING: the lowest logged validation loss (epochs >= {min_epoch}) is at epoch {overall} '
               f'({loss_per_epoch[overall]:.4f}), which has no prediction folder; run prediction for it.')
     return best, candidates[best], tag
 
 
-def _subject_keys(eval_dir):
+def select_checkpoint(folders, select='val_loss', models_dir=None, best_metric='dice', min_epoch=40):
+    """Returns (best checkpoint folder, description) or (None, reason)."""
+    if select == 'val_loss':
+        best, score, tag = pick_best_by_val_loss(folders, models_dir, min_epoch)
+        if best is None:
+            return None, (f'cannot select on validation loss: {tag}. Pass --models MODEL_DIR, or --select test '
+                          f'to select on the test set (biased)')
+        return best, f'validation loss {tag} = {score:.6f}, epochs >= {min_epoch} (TensorBoard logs under {models_dir})'
+    best, score = pick_best_folder(folders, best_metric)
+    if best is None:
+        return None, f'no {best_metric}.npy found to pick a best checkpoint'
+    print('\nWARNING: selecting the checkpoint on the test set; the comparison below is optimistic.')
+    return best, f'TEST-SET mean {best_metric} = {score:.6f} (biased: same subjects as the comparison)'
+
+
+def _gt_cases(eval_dir):
+    """GT relative paths (subjects.txt column 3) in evaluation order: the pairing key of two evaluations."""
     with open(Path(eval_dir) / 'subjects.txt') as f:
-        return [tuple(line.split('\t')[:2]) for line in f if line.strip()]
+        return [line.split('\t')[2] for line in f if line.strip()]
 
 
-def compare_best_to_baseline(sweep_path, folders, baseline_seg, gt_dir, best_metric='dice',
-                             select='val_loss', models_dir=None):
-    """Pick the best checkpoint among folders (select='val_loss': lowest validation loss in the TensorBoard
-    logs under models_dir, independent of the test set; select='test': best mean best_metric on the swept
-    test-set results, which biases the final comparison), evaluate it and the baseline against gt_dir with
-    identical resampling/ordering, then run_comparison(baseline, best). Outputs go to <sweep_path>/comparison/."""
+def eval_pair(ref_seg, cmp_seg, gt_dir, ref_out, cmp_out):
+    """Evaluate two segmentation folders against gt_dir, restricted to the GT cases both have, so the
+    metric arrays are paired column by column. Returns the number of shared cases."""
+    eval_seg_vs_gt(ref_seg, gt_dir, ref_out)
+    eval_seg_vs_gt(cmp_seg, gt_dir, cmp_out)
+    ref_cases, cmp_cases = _gt_cases(ref_out), _gt_cases(cmp_out)
+    if ref_cases != cmp_cases:
+        shared = sorted(set(ref_cases) & set(cmp_cases))
+        print(f'\nWARNING: {ref_seg} covers {len(ref_cases)} GT cases and {cmp_seg} covers {len(cmp_cases)}; '
+              f'restricting both to the {len(shared)} shared cases.')
+        if not shared:
+            return 0
+        eval_seg_vs_gt(ref_seg, gt_dir, ref_out, gt_subset=shared)
+        eval_seg_vs_gt(cmp_seg, gt_dir, cmp_out, gt_subset=shared)
+    return len(_gt_cases(ref_out))
+
+
+def sensitivity_3t(folders, baseline_eval, gt_dir, root, best, min_epoch=40):
+    """Your model vs the baseline at every checkpoint with epoch >= min_epoch (pooled Dice and mean distance,
+    paired Wilcoxon), to show the 3T conclusion does not depend on the selected checkpoint.
+    Writes root/sensitivity_3t.csv."""
+    cases = _gt_cases(baseline_eval)
+    rows = []
+    for folder in sorted((f for f in folders if (_epoch_of(f) or -1) >= min_epoch), key=_epoch_of):
+        out = Path(root) / 'checkpoints' / Path(folder).name
+        print(f'\n--- Sensitivity: evaluating {Path(folder).name} ---')
+        eval_seg_vs_gt(folder, gt_dir, out, gt_subset=cases)
+        if _gt_cases(out) != cases:
+            print(f'Skipping {Path(folder).name}: does not cover the same GT cases as the baseline.')
+            continue
+        row = {'checkpoint': Path(folder).name, 'epoch': _epoch_of(folder), 'selected': str(folder) == str(best)}
+        for metric in ('dice', 'mean_distance'):
+            pooled = _compare_table(baseline_eval, out, metric).iloc[-1]
+            row.update({f'{metric}_baseline': pooled['mean_ref'], f'{metric}_model': pooled['mean_cmp'],
+                        f'{metric}_p': pooled['p_wilcoxon']})
+        rows.append(row)
+    if not rows:
+        print(f'\nNo checkpoints with epoch >= {min_epoch} for the sensitivity table.')
+        return None
+    df = pd.DataFrame(rows)
+    df['dice_model_better'] = df['dice_model'] > df['dice_baseline']
+    df['mean_distance_model_better'] = df['mean_distance_model'] < df['mean_distance_baseline']
+    out_path = Path(root) / 'sensitivity_3t.csv'
+    df.to_csv(out_path, index=False)
+    print(f'\n=== 3T sensitivity: model vs baseline at every checkpoint (epoch >= {min_epoch}) ===')
+    print(df.to_string(index=False, float_format=lambda v: f'{v:.4f}'))
+    n = len(df)
+    print(f'Model better on Dice at {df.dice_model_better.sum()}/{n} checkpoints '
+          f'({(df.dice_p < 0.05).sum()} with p < 0.05); better on mean distance at '
+          f'{df.mean_distance_model_better.sum()}/{n} ({(df.mean_distance_p < 0.05).sum()} with p < 0.05).')
+    print(f'Wrote {out_path}')
+    return df
+
+
+def summarize_7t(eval_dir, out_dir):
+    """Descriptive 7T results: one value per image (its present hemisphere), averaged per subject over
+    images (contrasts/sessions), then mean, SD, median and IQR across subjects. Writes results_7t_images.csv
+    and results_7t_summary.csv into out_dir."""
+    with open(Path(eval_dir) / 'subjects.txt') as f:
+        cases = [line.rstrip('\n').split('\t') for line in f if line.strip()]
+    present = np.load(Path(eval_dir) / 'dice.npy') != 0
+    images = pd.DataFrame({'subject': [c[0] for c in cases], 'hemi': [c[1] for c in cases],
+                           'gt': [c[2] for c in cases]})
+    for metric in MAXIMIZE_METRICS + MINIMIZE_METRICS:
+        path = Path(eval_dir) / f'{metric}.npy'
+        if path.exists():
+            images[metric] = np.where(present, np.load(path), 0).sum(axis=0)
+    metrics = [m for m in MAXIMIZE_METRICS + MINIMIZE_METRICS if m in images]
+    per_subject = images.groupby('subject')[metrics].mean()
+    summary = pd.DataFrame({'n_subjects': per_subject.count(), 'n_images': images[metrics].count(),
+                            'mean': per_subject.mean(), 'std': per_subject.std(ddof=1),
+                            'median': per_subject.median(), 'q25': per_subject.quantile(0.25),
+                            'q75': per_subject.quantile(0.75)}).rename_axis('metric').reset_index()
+    images.to_csv(Path(out_dir) / 'results_7t_images.csv', index=False)
+    summary.to_csv(Path(out_dir) / 'results_7t_summary.csv', index=False)
+    print(f'\n=== 7T result ({len(per_subject)} subjects, {len(images)} images; per-subject means) ===')
+    print(summary.to_string(index=False, float_format=lambda v: f'{v:.4f}'))
+    print(f'Wrote {Path(out_dir) / "results_7t_summary.csv"}')
+    return summary
+
+
+def result_7t(best, seg_7t, gt_7t, root_7t, baseline_7t=None):
+    """Evaluate the selected checkpoint's 7T predictions (prediction.py SPLIT='test7t') against the 7T GT,
+    and compare with the baseline's 7T segmentations if given."""
+    name = Path(best).name
+    best_7t = Path(seg_7t) / name
+    if not best_7t.is_dir():
+        print(f"\n7T: no predictions for {name} under {seg_7t}; run prediction.py with SPLIT='test7t', "
+              f"CHECKPOINTS=['{name}'], then re-run this script.")
+        return None
+    if not Path(gt_7t).is_dir():
+        print(f'\n7T: GT folder {gt_7t} not found (set it with --gt-7t).')
+        return None
+    root_7t = Path(root_7t)
+    root_7t.mkdir(parents=True, exist_ok=True)
+    print(f'\n--- 7T: evaluating {best_7t} against {gt_7t} ---')
+    eval_seg_vs_gt(best_7t, gt_7t, root_7t / name)
+    summary = summarize_7t(root_7t / name, root_7t)
+    if baseline_7t:
+        if not Path(baseline_7t).is_dir():
+            print(f'\n7T: baseline folder {baseline_7t} not found; skipping the 7T comparison.')
+        elif eval_pair(baseline_7t, best_7t, gt_7t, root_7t / 'baseline', root_7t / name):
+            print('\nNOTE: 7T tests below treat every image (hemisphere x contrast/session) as independent, '
+                  'although images of the same subject are not. With 4 subjects a subject-level Wilcoxon '
+                  'cannot go below p = 0.125, so report the 7T comparison as descriptive.')
+            run_comparison(root_7t / 'baseline', root_7t / name, out_dir=root_7t)
+    return summary
+
+
+def compare_best_to_baseline(sweep_path, folders, baseline_seg, gt_dir, best_metric='dice', select='val_loss',
+                             models_dir=None, min_epoch=40, sensitivity=True,
+                             seg_7t=None, gt_7t=None, baseline_7t=None):
+    """Select the final checkpoint (select='val_loss': lowest synthetic validation loss at epoch >= min_epoch,
+    no real data used; select='test': best mean best_metric on the test results, biased), then:
+    3T comparison with the baseline (<sweep>/comparison/), the 3T sensitivity table across checkpoints, and
+    the 7T result of the selected checkpoint (<sweep>/comparison_7t/) when its 7T predictions exist."""
     for name, d in (('baseline', baseline_seg), ('GT', gt_dir)):
         if not Path(d).is_dir():
             print(f'\nSkipping comparison: {name} folder {d} not found (set it with --{name.lower()}).')
             return None
 
-    if select == 'val_loss':
-        best, score, tag = pick_best_by_val_loss(folders, models_dir)
-        if best is None:
-            print(f'\nSkipping comparison: cannot select on validation loss: {tag}. '
-                  f'Pass --models MODEL_DIR, or --select test to select on the test set (biased).')
-            return None
-        selected_by = f'validation loss {tag} = {score:.6f} (TensorBoard logs under {models_dir})'
-    else:
-        best, score = pick_best_folder(folders, best_metric)
-        if best is None:
-            print(f'\nSkipping comparison: no {best_metric}.npy found to pick a best checkpoint.')
-            return None
-        selected_by = f'TEST-SET mean {best_metric} = {score:.6f} (biased: same subjects as the comparison)'
-        print('\nWARNING: selecting the checkpoint on the test set; the comparison below is optimistic.')
-    print(f'\nBest checkpoint: {best}\n  selected by {selected_by}')
+    best, selected_by = select_checkpoint(folders, select, models_dir, best_metric, min_epoch)
+    if best is None:
+        print(f'\nSkipping comparison: {selected_by}.')
+        return None
+    print(f'\nSelected checkpoint: {best}\n  selected by {selected_by}')
 
     sweep_path = Path(sweep_path)
-    root = (sweep_path.parent if sweep_path in map(Path, folders) else sweep_path) / COMPARISON_DIRNAME
-    best_eval, baseline_eval = root / Path(best).name, root / 'baseline'
-
-    print(f'\n--- Evaluating best checkpoint against {gt_dir} ---')
-    eval_seg_vs_gt(best, gt_dir, best_eval)
-    print(f'\n--- Evaluating baseline {baseline_seg} against {gt_dir} ---')
-    eval_seg_vs_gt(baseline_seg, gt_dir, baseline_eval)
-
-    if _subject_keys(best_eval) != _subject_keys(baseline_eval):
-        print(f'\nSkipping statistics: subjects differ between {best_eval}/subjects.txt and '
-              f'{baseline_eval}/subjects.txt, so the paired tests would be invalid.')
-        return None
+    sweep_root = sweep_path.parent if sweep_path in map(Path, folders) else sweep_path
+    root = sweep_root / COMPARISON_DIRNAME
+    root.mkdir(parents=True, exist_ok=True)
     with open(root / 'selection.txt', 'w') as f:
-        f.write(f'best_checkpoint\t{best}\nselected_by\t{selected_by}\n'
+        f.write(f'selected_checkpoint\t{best}\nselected_by\t{selected_by}\n'
                 f'baseline\t{baseline_seg}\ngt\t{gt_dir}\n')
-    return run_comparison(baseline_eval, best_eval, out_dir=root)
+
+    best_eval, baseline_eval = root / Path(best).name, root / 'baseline'
+    print(f'\n--- 3T: evaluating baseline {baseline_seg} and {Path(best).name} against {gt_dir} ---')
+    if not eval_pair(baseline_seg, best, gt_dir, baseline_eval, best_eval):
+        print('\nSkipping statistics: the baseline and the selected checkpoint share no GT cases.')
+        return None
+    summary = run_comparison(baseline_eval, best_eval, out_dir=root)
+
+    if sensitivity:
+        sensitivity_3t(folders, baseline_eval, gt_dir, root, best, min_epoch)
+    if seg_7t:
+        result_7t(best, seg_7t, gt_7t, sweep_root / f'{COMPARISON_DIRNAME}_7t', baseline_7t)
+    return summary
 
 
 def _pop_flag(argv, flag, n_values=1, default=None):
@@ -454,6 +591,11 @@ if __name__ == '__main__':
     select = _pop_flag(argv, '--select', default='val_loss')
     if select not in ('val_loss', 'test'):
         sys.exit(f'--select must be val_loss or test, got {select}')
+    min_epoch = int(_pop_flag(argv, '--min-epoch', default=40))
+    seg_7t_arg = _pop_flag(argv, '--seg-7t')
+    gt_7t = _pop_flag(argv, '--gt-7t', default=DEFAULT_GT_7T)
+    baseline_7t = _pop_flag(argv, '--baseline-7t')
+    sensitivity = not _pop_flag(argv, '--no-sensitivity', n_values=0, default=False)
     do_compare = not _pop_flag(argv, '--no-compare', n_values=0, default=False) and not use_mauri
 
     args = argv or [DEFAULT_SEG_ROOT]
@@ -483,7 +625,10 @@ if __name__ == '__main__':
                                  out_dir=os.path.commonpath([str(f) for f in folders]))
                 loss_plotted = True
             if do_compare:
-                compare_best_to_baseline(arg, folders, baseline_seg, gt_dir, best_metric, select, models_dir)
+                # 7T predictions of the same experiment: --seg-7t, else <DEFAULT_SEG_7T_ROOT>/<experiment name>
+                seg_7t = seg_7t_arg or str(Path(DEFAULT_SEG_7T_ROOT) / Path(arg).resolve().name)
+                compare_best_to_baseline(arg, folders, baseline_seg, gt_dir, best_metric, select, models_dir,
+                                         min_epoch, sensitivity, seg_7t, gt_7t, baseline_7t)
     if models_dir and not loss_plotted:
         plot_loss_curves(models_dir)
     print(f'\nDone: wrote metrics CSVs for {n_written} folder(s).')

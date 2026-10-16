@@ -128,19 +128,66 @@ def _collect_gt_paths(gt_folder):
     return sorted(collected, key=lambda p: (os.path.basename(p).lower(), p.lower()))
 
 
+def scan_tokens(text):
+    """Contrast (t1/t2), session and slice orientation parsed from a file name or relative path, used to tell
+    apart several label maps of the same subject and hemisphere (e.g. 7T t1w, t2w-cor, t2w-tra)."""
+    text = text.lower()
+    contrast = re.search(r'(?<![a-z0-9])t([12])w?(?![a-z0-9])', text)
+    session = re.search(r'ses-([a-z0-9]+)', text)
+    orientation = re.search(r'(?<![a-z])(cor|tra|sag|ax)(?![a-z])', text)
+    return {'contrast': contrast.group(1) if contrast else None,
+            'session': re.sub(r'^t?0*', '', session.group(1)) if session else None,
+            'orientation': orientation.group(1) if orientation else None}
+
+
+def best_gt_match(seg_text, candidates):
+    """Pick the GT among candidates [(gt_path, gt_text)] (same subject and hemisphere) whose scan tokens agree
+    with seg_text: no conflicting contrast/session/orientation, most tokens in common. A single candidate is
+    returned as is; raises ValueError if the choice is ambiguous or every candidate conflicts."""
+    if len(candidates) == 1:
+        return candidates[0][0]
+    seg_tokens = scan_tokens(seg_text)
+    scored = []
+    for gt_path, gt_text in candidates:
+        gt_tokens = scan_tokens(gt_text)
+        pairs = [(seg_tokens[k], gt_tokens[k]) for k in seg_tokens if seg_tokens[k] and gt_tokens[k]]
+        if all(a == b for a, b in pairs):
+            scored.append((len(pairs), gt_path))
+    if not scored:
+        raise ValueError(f'No GT compatible with {seg_text} among {[c[0] for c in candidates]}')
+    best_score = max(score for score, _ in scored)
+    best = [path for score, path in scored if score == best_score]
+    if len(best) > 1 and seg_tokens['contrast'] is None:
+        # a segmentation without contrast in its name (e.g. Mauri's claustrum.lh.nii.gz) is assumed to be of the T1
+        t1 = [path for path, text in candidates if path in best and scan_tokens(text)['contrast'] == '1']
+        best = t1 if len(t1) == 1 else best
+    if len(best) > 1:
+        raise ValueError(f'Ambiguous GT for {seg_text}: {best} (add contrast/session to the file names)')
+    return best[0]
+
+
 def _match_gt_paths(path_segmentations, gt_paths):
-    """Match segmentations and GT by subject/hemisphere, with sorting fallback."""
+    """Match segmentations and GT by subject/hemisphere (and contrast/session when a subject and hemisphere
+    have several GT files), with sorting fallback."""
     def subject_hemisphere(path):
         match = re.search(r'(\d+).*?(lh|rh)', os.path.basename(path), re.IGNORECASE)
         if match:
             return str(int(match.group(1))), match.group(2).lower()
         return None
 
+    def gt_text(path):  # parent folder carries the contrast for e.g. claustrum_gt/7T/T2/...
+        return os.path.join(os.path.basename(os.path.dirname(path)), os.path.basename(path))
+
     parsed_gt = [(path, subject_hemisphere(path)) for path in gt_paths]
     seg_keys = [subject_hemisphere(path) for path in path_segmentations]
     if all(key is not None and any(gt_key == key for _, gt_key in parsed_gt) for key in seg_keys):
-        matched = [(path_seg, next(path for path, gt_key in parsed_gt if gt_key == key))
+        matched = [(path_seg, best_gt_match(os.path.basename(path_seg),
+                                            [(path, gt_text(path)) for path, gt_key in parsed_gt if gt_key == key]))
                    for path_seg, key in zip(path_segmentations, seg_keys)]
+        used = [path_gt for _, path_gt in matched]
+        if len(set(used)) < len(used):
+            raise ValueError('Several segmentations matched to the same ground-truth file: '
+                             f'{sorted({p for p in used if used.count(p) > 1})}')
     elif len(path_segmentations) == len(gt_paths):
         matched = list(zip(path_segmentations, gt_paths))
     else:

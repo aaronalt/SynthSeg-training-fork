@@ -37,14 +37,14 @@ RERUN_TMP_PREDICTIONS = False
 #               (CHECKPOINTS = None) so collect_metrics.py can build the 3T sensitivity table.
 #   'test7t' -> real 7T scans of the 4 VAL_2 subjects: secondary 7T result. Predict only the selected
 #               checkpoint, e.g. CHECKPOINTS = ['dice_finetune_045_200'].
-SPLIT = 'test3t'
+SPLIT = 'test7t'
 SPLIT_IMAGES = {'test3t': '/home/althause/data/TEST_2',
                 'test7t': '/home/althause/data/VAL_2_real'}
 SEG_ROOTS = {'test3t': '/home/althause/data/seg', 'test7t': '/home/althause/data/seg_7t'}
 # manual labels each split is evaluated against (searched recursively, matched by subject + hemisphere
 # + contrast/session when the filenames carry one)
 SPLIT_GT = {'test3t': '/home/althause/data/claustrum_gt/3T', 'test7t': '/home/althause/data/claustrum_gt/7T'}
-CHECKPOINTS = None  # None = all checkpoints, else a list of checkpoint names (without .h5)
+CHECKPOINTS = ['dice_finetune_028_200']  # None = all checkpoints, else a list of checkpoint names (without .h5)
 
 
 def _subject_ids(folder):
@@ -80,7 +80,7 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260923_093722_only_quality_labels_clau10x'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261014_140139_dice.entropy.loss'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
 # model_files = model_files[37:39]
 

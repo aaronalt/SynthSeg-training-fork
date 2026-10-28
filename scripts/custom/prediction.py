@@ -87,8 +87,8 @@ model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
 # Ground truth directories for evaluation
 gt_dirs = {
     '7T': [
-        Path('/home/althause/data/claustrum_gt/7T/T1_CONTROL'),
-        Path('/home/althause/data/claustrum_gt/7T/T2'),
+        Path('/home/althause/data/claustrum_gt/7T/all')
+        #Path('/home/althause/data/claustrum_gt/7T/T2'),
     ],
     '3T': [
         Path('/home/althause/data/claustrum_gt/3T/T1_CONTROL_edit_08.26'),

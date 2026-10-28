@@ -43,7 +43,7 @@ SPLIT_IMAGES = {'test3t': '/home/althause/data/TEST_2',
 SEG_ROOTS = {'test3t': '/home/althause/data/seg', 'test7t': '/home/althause/data/seg_7t'}
 # manual labels each split is evaluated against (searched recursively, matched by subject + hemisphere
 # + contrast/session when the filenames carry one)
-SPLIT_GT = {'test3t': '/home/althause/data/claustrum_gt/3T', 'test7t': '/home/althause/data/claustrum_gt/7T'}
+SPLIT_GT = {'test3t': '/home/althause/data/claustrum_gt/3T', 'test7t': '/home/althause/data/claustrum_gt/7T/all'}
 CHECKPOINTS = ['dice_finetune_028_200']  # None = all checkpoints, else a list of checkpoint names (without .h5)
 
 

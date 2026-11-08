@@ -1,11 +1,6 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
-Version: dice.hd95.loss
-Changelog:
-- dice + hd95 loss for compound error metrics
--LR: 1e-4 to 1e-6 (plateau)
-#######
 """
 
 import os
@@ -33,7 +28,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'dice.hd95.loss'
+version = 'boundary.labels.CE'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -96,7 +91,9 @@ path_generation_labels = np.array([0, 14, 15, 16, 24,
                                    2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
                                    41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 n_neutral_labels = 5
-path_segmentation_labels = path_generation_labels.copy()
+path_segmentation_labels = np.array([0, 0, 0, 0, 0,
+                                   2, 3, 0, 0, 0, 0, 0, 0, 12, 0, 0, 18, 0, 0, 138,
+                                   41, 42, 0, 0, 0, 0, 0, 0, 51, 0, 0, 54, 0, 0, 139])
 
 # Label weights for Dice loss (Claustrum=1, others=0)
 label_weights = np.ones(len(path_segmentation_labels))
@@ -105,7 +102,7 @@ for lbl in [138, 139]:
     label_weights[idx] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
-hd95_weight = 0.001
+hd95_weight = 0
 
 # Shape and resolution
 target_res = 0.50
@@ -197,6 +194,6 @@ training(TRAIN,
          prior_stds=stds,
          label_weights=label_weights,
          hd95_weight=hd95_weight,
-         metric_type=['dice'],      # 'dice', ['dice','moment'], ['dice','ce']
-         loss_weights=None                  # e.g. [1.0, 0.1]
+         metric_type=['dice', 'ce'],      # 'dice', ['dice','moment'], ['dice','ce']
+         loss_weights=[1.0, 0.1]          # e.g. CE:[1.0, 0.1]
          )

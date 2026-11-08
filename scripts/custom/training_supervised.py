@@ -201,16 +201,30 @@ def crop_or_pad(vol, shape):
 
 
 def load_pretrained(unet_model, path):
-    """Load weights by layer name and fail loudly if any UNet layer is not found in the checkpoint.
-    Keras by_name loading raises on shape mismatches (e.g. wrong label count) but silently skips missing names."""
+    """Load the Mauri checkpoint, stored as one group per layer named '<layer>_<layer>' with one dataset per weight.
+    Fails if any UNet layer or weight is missing, or has a different shape (e.g. a different number of labels)."""
     with h5py.File(path, 'r') as f:
-        g = f['model_weights'] if 'model_weights' in f else f
-        saved = [n.decode() if isinstance(n, bytes) else n for n in g.attrs['layer_names']]
-    unet_layers = [l.name for l in unet_model.layers if l.weights and l.name.startswith('unet')]
-    missing = [n for n in unet_layers if n not in saved]
-    assert not missing, f'These UNet layers are missing from the checkpoint: {missing}'
-    unet_model.load_weights(path, by_name=True)
-    print(f'Loaded {len(unet_layers)} UNet layers from {path}')
+        loaded, used = 0, set()
+        for layer in unet_model.layers:
+            if not layer.weights or not layer.name.startswith('unet'):
+                continue
+            key = f'{layer.name}_{layer.name}'
+            assert key in f, f'Layer {layer.name} not found in checkpoint (expected group {key})'
+            stored = {k.split(':')[0]: f[key][k][()] for k in f[key].keys()}
+            new_weights = []
+            for w in layer.weights:
+                short = w.name.split('/')[-1].split(':')[0]
+                assert short in stored, f'{layer.name}: weight {short} missing in checkpoint (has {list(stored)})'
+                assert tuple(stored[short].shape) == tuple(w.shape), \
+                    f'{layer.name}/{short}: checkpoint shape {stored[short].shape} vs model {tuple(w.shape)}'
+                new_weights.append(stored[short])
+            layer.set_weights(new_weights)
+            used.add(key)
+            loaded += 1
+        unused = sorted(set(f.keys()) - used)
+    print(f'Loaded {loaded} UNet layers from {path}')
+    if unused:
+        print(f'WARNING: checkpoint groups not used: {unused}')
 
 
 def build_weighted_dice_model(unet_model, label_list, weights):

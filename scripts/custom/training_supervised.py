@@ -50,7 +50,7 @@ EXCLUDE_SUBJECTS = []
 TRAIN = Path('/home/althause/data/TRAIN_3')
 VAL = Path('/home/althause/data/VAL_3')
 TEST = Path('/home/althause/data/TEST_2')
-LABEL_ROOT = Path('/home/althause/data/claustrum_gt/3T_like')
+LABEL_ROOT = Path('/home/althause/data/claustrum_gt/3T_like_relabelled')
 
 # Per contrast: text identifying it in the image filename, and in the label filename.
 # Images containing none of the image tags are T1w. If T2 images share the T1w label maps, set their label tag to '_t1w_'.

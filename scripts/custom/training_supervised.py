@@ -82,22 +82,23 @@ dice_epochs = 200
 steps_per_epoch = 1000
 
 # Labels: 5 neutral, then 15 left, then 15 right (order required by RandomFlip)
-segmentation_labels = np.array([0, 14, 15, 16, 24,
-                                2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
-                                41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
-n_neutral_labels = 5
-CLAUSTRUM_LABELS = [138, 139]
+segmentation_labels = np.array([0, 4, 15, 16, 24, 41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
+n_neutral_labels = 20
+CLAUSTRUM_LABELS = [139]
 
-label_weights = np.ones(len(segmentation_labels))
-for lbl in CLAUSTRUM_LABELS:
-    label_weights[np.where(segmentation_labels == lbl)[0][0]] = 10.0
+# label_weights = np.ones(len(segmentation_labels))
+# for lbl in CLAUSTRUM_LABELS:
+#    label_weights[np.where(segmentation_labels == lbl)[0][0]] = 10.0
+# Claustrum-only loss: the masks contain no other structures
+label_weights = np.zeros(len(segmentation_labels))
+label_weights[segmentation_labels == 139] = 1.0
 
 # Shape. output_shape must be divisible by 2 ** n_levels (= 32).
-output_shape = 192
-val_crop_shape = [192, 192, 192]
+output_shape = 160
+val_crop_shape = [160, 160, 160]
 
 # Augmentation (resolution randomisation intentionally off in this baseline)
-flipping = True
+flipping = False
 scaling_bounds = 0.2
 rotation_bounds = 15
 shearing_bounds = 0.015

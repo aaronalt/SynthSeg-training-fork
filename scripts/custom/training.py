@@ -96,10 +96,10 @@ path_segmentation_labels = np.array([0, 0, 0, 0, 0,
                                    41, 42, 0, 0, 0, 0, 0, 0, 51, 0, 0, 54, 0, 0, 139])
 
 # Label weights for Dice loss (Claustrum=1, others=0)
-label_weights = np.ones(len(path_segmentation_labels))
+output_labels = np.unique(path_segmentation_labels)
+label_weights = np.ones(len(output_labels))
 for lbl in [138, 139]:
-    idx = np.where(path_segmentation_labels == lbl)[0][0]
-    label_weights[idx] = 10.0
+    label_weights[output_labels == lbl] = 10.0
 
 # Weight of the HD95 boundary loss added to the soft Dice loss (0 = Dice only)
 hd95_weight = 0

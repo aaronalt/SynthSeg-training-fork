@@ -149,7 +149,7 @@ for path_model in model_files:
     n_channels = trained_model_params.get('n_channels')
 
     # comment out to run predictions on mauri segmentations
-    path_gt = '/home/althause/data/claustrum_gt/3T'
+    path_gt = gt_dirs['3T']
     # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below. Only clear the folder

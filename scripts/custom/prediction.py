@@ -75,7 +75,6 @@ def get_epoch(f):
     match = re.search(r'_(\d+)_\d+\.h5$', f)
     return int(match.group(1)) if match else 0
 
-
 #############
 # Prediction
 #############

@@ -186,7 +186,8 @@ for path_model in model_files:
     n_channels = trained_model_params.get('n_channels')
 
     # uncomment the mauri line (test3t only) to evaluate against Mauri's model segmentations instead
-    path_gt = SPLIT_GT[SPLIT]
+    # path_gt = SPLIT_GT[SPLIT]
+    path_gt = gt_dirs['3T']
     # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below. Only clear the folder

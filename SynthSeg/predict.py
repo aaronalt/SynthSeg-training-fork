@@ -38,164 +38,75 @@ from ext.lab2im import edit_volumes
 from ext.neuron import models as nrn_models
 
 
-def _extract_subject_hemi(filename):
-    """Extract subject ID and hemisphere (lh/rh or left/right) from a filename."""
-    name_lower = filename.lower()
-
-    # Extract hemisphere
-    hemi = None
-    if 'lh' in name_lower or 'left' in name_lower:
-        hemi = 'lh'
-    elif 'rh' in name_lower or 'right' in name_lower:
-        hemi = 'rh'
-
-    # Extract subject pattern (e.g., 'sub-01', 'sub_01', 'subject1', or first alphanumeric string)
-    subj_match = re.search(r'(sub[-\_]?\w+|subject[-\_]?\w+)', name_lower)
-    subj = subj_match.group(0) if subj_match else None
-
-    return subj, hemi
-
-
-def _find_matching_gt_in_folder(target_dir, subj, hemi):
-    """Search target_dir for a file matching subject and hemisphere."""
-    if not os.path.exists(target_dir):
-        return None
-
-    for p in Path(target_dir).rglob('*'):
-        if not p.is_file():
-            continue
-        if not (p.suffix.lower() in ('.nii', '.mgz', '.npz') or p.name.lower().endswith('.nii.gz')):
-            continue
-
-        p_name = p.name.lower()
-
-        # Match subject if identified
-        if subj and subj not in p_name:
-            continue
-        # Match hemisphere if identified
-        if hemi and (hemi not in p_name and ('left' if hemi == 'lh' else 'right') not in p_name):
-            continue
-
-        return str(p)
-    return None
-
-
 def _collect_gt_paths(gt_folder):
-    """
-    Collect ground-truth image paths.
-    If an input file contains '7t' in its name, searches inside the '7T' subdirectory
-    for the corresponding subject and hemisphere GT file.
-    """
-
-    def resolve_single_path(path_str):
-        path_obj = Path(path_str)
-        filename_lower = path_obj.name.lower()
-
-        if os.path.isdir(path_str):
-            # Process directory contents recursively
-            return [
-                str(p) for p in sorted(path_obj.rglob('*'))
-                if p.is_file() and (p.suffix.lower() in ('.nii', '.mgz', '.npz')
-                                    or p.name.lower().endswith('.nii.gz'))
-            ]
-
-        # File input handling
-        if '7t' in filename_lower:
-            subj, hemi = _extract_subject_hemi(filename_lower)
-
-            # Determine base GT root (e.g., if path is /data/claustrum_gt/some_file.nii.gz)
-            gt_root = path_obj.parent
-            if gt_root.name.upper() in ('3T', '7T'):
-                gt_root = gt_root.parent  # Move up to /data/claustrum_gt
-
-            target_7t_dir = gt_root / '7T'
-
-            matched_gt = _find_matching_gt_in_folder(target_7t_dir, subj, hemi)
-            if matched_gt:
-                return [matched_gt]
-
-        return [path_str]
-
-    # Handle input list vs single directory/file input
-    if isinstance(gt_folder, (list, tuple)):
-        paths = []
-        for path in gt_folder:
-            paths.extend(resolve_single_path(os.fspath(path)))
-        return sorted(set(paths), key=lambda p: (os.path.basename(p).lower(), p.lower()))
-
-    gt_folder = os.fspath(gt_folder)
-    collected = resolve_single_path(gt_folder)
-    return sorted(collected, key=lambda p: (os.path.basename(p).lower(), p.lower()))
+    """List ground-truth label maps. gt_folder can be a folder, a file, or a list of folders/files.
+    Folders are read at the TOP LEVEL ONLY (subfolders are ignored)."""
+    entries = gt_folder if isinstance(gt_folder, (list, tuple)) else [gt_folder]
+    gt_paths = []
+    for entry in entries:
+        entry = os.fspath(entry)
+        if os.path.isdir(entry):
+            gt_paths += utils.list_images_in_folder(entry)
+        elif os.path.isfile(entry):
+            gt_paths.append(entry)
+        else:
+            raise ValueError(f'Ground-truth path does not exist: {entry}')
+    return gt_paths
 
 
-def scan_tokens(text):
-    """Contrast (t1/t2), session and slice orientation parsed from a file name or relative path, used to tell
-    apart several label maps of the same subject and hemisphere (e.g. 7T t1w, t2w-cor, t2w-tra)."""
-    text = text.lower()
-    contrast = re.search(r'(?<![a-z0-9])t([12])w?(?![a-z0-9])', text)
-    session = re.search(r'ses-([a-z0-9]+)', text)
-    orientation = re.search(r'(?<![a-z])(cor|tra|sag|ax)(?![a-z])', text)
-    return {'contrast': contrast.group(1) if contrast else None,
-            'session': re.sub(r'^t?0*', '', session.group(1)) if session else None,
-            'orientation': orientation.group(1) if orientation else None}
-
-
-def best_gt_match(seg_text, candidates):
-    """Pick the GT among candidates [(gt_path, gt_text)] (same subject and hemisphere) whose scan tokens agree
-    with seg_text: no conflicting contrast/session/orientation, most tokens in common. A single candidate is
-    returned as is; raises ValueError if the choice is ambiguous or every candidate conflicts."""
-    if len(candidates) == 1:
-        return candidates[0][0]
-    seg_tokens = scan_tokens(seg_text)
-    scored = []
-    for gt_path, gt_text in candidates:
-        gt_tokens = scan_tokens(gt_text)
-        pairs = [(seg_tokens[k], gt_tokens[k]) for k in seg_tokens if seg_tokens[k] and gt_tokens[k]]
-        if all(a == b for a, b in pairs):
-            scored.append((len(pairs), gt_path))
-    if not scored:
-        raise ValueError(f'No GT compatible with {seg_text} among {[c[0] for c in candidates]}')
-    best_score = max(score for score, _ in scored)
-    best = [path for score, path in scored if score == best_score]
-    if len(best) > 1 and seg_tokens['contrast'] is None:
-        # a segmentation without contrast in its name (e.g. Mauri's claustrum.lh.nii.gz) is assumed to be of the T1
-        t1 = [path for path, text in candidates if path in best and scan_tokens(text)['contrast'] == '1']
-        best = t1 if len(t1) == 1 else best
-    if len(best) > 1:
-        raise ValueError(f'Ambiguous GT for {seg_text}: {best} (add contrast/session to the file names)')
-    return best[0]
-
-
-def _match_gt_paths(path_segmentations, gt_paths):
-    """Match segmentations and GT by subject/hemisphere (and contrast/session when a subject and hemisphere
-    have several GT files), with sorting fallback."""
-    def subject_hemisphere(path):
-        match = re.search(r'(\d+).*?(lh|rh)', os.path.basename(path), re.IGNORECASE)
-        if match:
-            return str(int(match.group(1))), match.group(2).lower()
+def _subject_hemisphere(path):
+    """(subject number, 'lh'/'rh') parsed from a file name, or None if either cannot be found."""
+    name = os.path.basename(path).lower()
+    subj = re.search(r'sub-?(\d+)', name)
+    hemi = re.search(r'(?:^|[._-])(lh|rh|left|right)(?=[._-]|$)', name)
+    if subj is None or hemi is None:
         return None
+    return int(subj.group(1)), 'lh' if hemi.group(1) in ('lh', 'left') else 'rh'
 
-    def gt_text(path):  # parent folder carries the contrast for e.g. claustrum_gt/7T/T2/...
-        return os.path.join(os.path.basename(os.path.dirname(path)), os.path.basename(path))
 
-    parsed_gt = [(path, subject_hemisphere(path)) for path in gt_paths]
-    seg_keys = [subject_hemisphere(path) for path in path_segmentations]
-    if all(key is not None and any(gt_key == key for _, gt_key in parsed_gt) for key in seg_keys):
-        matched = [(path_seg, best_gt_match(os.path.basename(path_seg),
-                                            [(path, gt_text(path)) for path, gt_key in parsed_gt if gt_key == key]))
-                   for path_seg, key in zip(path_segmentations, seg_keys)]
-        used = [path_gt for _, path_gt in matched]
-        if len(set(used)) < len(used):
-            raise ValueError('Several segmentations matched to the same ground-truth file: '
-                             f'{sorted({p for p in used if used.count(p) > 1})}')
-    elif len(path_segmentations) == len(gt_paths):
-        matched = list(zip(path_segmentations, gt_paths))
-    else:
-        raise ValueError('Could not match all segmentations to ground-truth files.')
-    for path_seg, path_gt in matched:
-        if os.path.abspath(path_seg) == os.path.abspath(path_gt):
-            raise ValueError(f'Segmentation matched to itself as ground truth: {path_seg}')
-    return matched
+def _pair_gt_paths(path_segmentations, gt_paths):
+    """Pair segmentations and GT files by sorted order (no searching), then check every pair.
+    Both lists are sorted by (subject number, hemisphere) rather than raw file name, because raw names sort
+    differently for the two naming schemes (e.g. 'sub-526.' vs 'sub-5262.' and 'sub-526_' vs 'sub-5262_').
+    Raises an error instead of silently mis-pairing if the counts differ or any pair does not agree.
+    Pairs are returned in the original order of path_segmentations."""
+    n_seg, n_gt = len(path_segmentations), len(gt_paths)
+    if n_seg != n_gt:
+        raise ValueError(f'{n_seg} segmentations but {n_gt} ground-truth files; they must match one to one.\n'
+                         f'Segmentations: {[os.path.basename(p) for p in path_segmentations]}\n'
+                         f'Ground truth:  {[os.path.basename(p) for p in gt_paths]}')
+
+    seg_keys = [_subject_hemisphere(p) for p in path_segmentations]
+    gt_keys = [_subject_hemisphere(p) for p in gt_paths]
+
+    # fallback: names without subject/hemisphere -> plain sorted pairing, unchecked
+    if any(k is None for k in seg_keys + gt_keys):
+        print('[WARNING] Could not read subject/hemisphere from every file name; pairing by sorted file name '
+              'WITHOUT checking. Verify the pairs below:')
+        pairs = list(zip(sorted(path_segmentations, key=lambda p: os.path.basename(p).lower()),
+                         sorted(gt_paths, key=lambda p: os.path.basename(p).lower())))
+        for path_seg, path_gt in pairs:
+            print(f'    {os.path.basename(path_seg)}  <->  {os.path.basename(path_gt)}')
+        return pairs
+
+    for keys, paths, what in ((seg_keys, path_segmentations, 'segmentations'), (gt_keys, gt_paths, 'ground truth')):
+        duplicates = sorted({k for k in keys if keys.count(k) > 1})
+        if duplicates:
+            dup_files = [os.path.basename(p) for p, k in zip(paths, keys) if k in duplicates]
+            raise ValueError(f'Several {what} files share the same subject and hemisphere: {dup_files}')
+
+    seg_order = sorted(range(n_seg), key=lambda i: seg_keys[i])
+    gt_sorted = sorted(range(n_gt), key=lambda i: gt_keys[i])
+    pairs = [None] * n_seg
+    for i_seg, i_gt in zip(seg_order, gt_sorted):
+        if seg_keys[i_seg] != gt_keys[i_gt]:
+            raise ValueError(f'Pairing mismatch: {os.path.basename(path_segmentations[i_seg])} vs '
+                             f'{os.path.basename(gt_paths[i_gt])}. A subject or hemisphere is probably missing '
+                             f'from one side.')
+        if os.path.abspath(path_segmentations[i_seg]) == os.path.abspath(gt_paths[i_gt]):
+            raise ValueError(f'Segmentation paired with itself as ground truth: {path_segmentations[i_seg]}')
+        pairs[i_seg] = (path_segmentations[i_seg], gt_paths[i_gt])
+    return pairs
 
 
 def predict(path_images,
@@ -278,9 +189,11 @@ def predict(path_images,
     :param unet_feat_count: (optional) number of features for the first layer of the unet. Default is 24.
     :param feat_multiplier: (optional) multiplicative factor for the number of feature for each new level. Default is 2.
     :param activation: (optional) activation function. Can be 'elu', 'relu'.
-    :param gt_folder: (optional) path or list of ground-truth label maps corresponding to the input images. Directories
-    are searched recursively. Providing gt_folder triggers evaluation after predictions are resampled onto their
-    matched ground-truth grids.
+    :param gt_folder: (optional) folder, file, or list of folders/files of ground-truth label maps corresponding to the
+    input images. Folders are read at the top level only (subfolders are ignored). Segmentations and ground truths are
+    paired by sorted (subject, hemisphere) order and every pair is checked; there must be exactly one ground truth per
+    segmentation. Providing gt_folder triggers evaluation after predictions are resampled onto their paired
+    ground-truth grids.
     Specifically, the scores are contained in a numpy array, where labels are in rows, and subjects in columns.
     :param evaluation_labels: (optional) if gt_folder is True you can evaluate the Dice scores on a subset of the
     segmentation labels, by providing another label list here. Can be a sequence, a 1d numpy array, or the path to a
@@ -416,7 +329,7 @@ def predict(path_images,
                 path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
 
             gt_paths = _collect_gt_paths(gt_folder)
-            matched_paths = _match_gt_paths(path_segmentations, gt_paths)
+            matched_paths = _pair_gt_paths(path_segmentations, gt_paths)
 
             # Resample each prediction onto its paired GT grid for voxelwise evaluation.
             with tempfile.TemporaryDirectory(prefix='synthseg_evaluation_') as temp_dir:
@@ -502,7 +415,7 @@ def predict(path_images,
                 path_hausdorff = path_hausdorff_99 = path_hausdorff_95 = path_mean_distance = None
 
             gt_paths = _collect_gt_paths(gt_folder)
-            matched_paths = _match_gt_paths(path_segmentations, gt_paths)
+            matched_paths = _pair_gt_paths(path_segmentations, gt_paths)
 
             # Resample each prediction onto its paired GT grid for voxelwise evaluation.
             with tempfile.TemporaryDirectory(prefix='synthseg_evaluation_') as temp_dir:

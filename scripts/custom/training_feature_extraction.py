@@ -420,7 +420,9 @@ def train_model(model,
     # callbacks = [KC.ModelCheckpoint(save_file_name, verbose=1), KC.CSVLogger(os.path.join(log_dir, 'training.log'))]
 
     callbacks = [
-        KC.ModelCheckpoint(save_file_name, save_weights_only=True, verbose=1),
+        KC.ModelCheckpoint(os.path.join(model_dir, '%s_%s_best.h5' % (metric_label, phase)),
+                           monitor='val_dice_loss', mode='min', save_best_only=True,
+                           save_weights_only=True, verbose=1),
         KC.CSVLogger(os.path.join(log_dir, 'training.log')),
         KC.EarlyStopping(monitor='val_dice_loss', mode='min', patience=12,
                          verbose=1, restore_best_weights=True),
@@ -448,18 +450,6 @@ def train_model(model,
             target_weight=hd95_weight
         )
         callbacks.append(hd95_callback)
-
-    reduce_lr = ReduceLROnPlateau(
-        monitor='val_loss',  # Metric to monitor
-        factor=0.5,  # Multiplier: new_lr = lr * factor (halves LR)
-        patience=5,  # Wait 5 epochs without improvement before reducing LR
-        verbose=1,  # Log LR update message in console
-        min_delta=0.005,  # Minimum loss change to qualify as an improvement
-        cooldown=2,  # Wait 2 epochs after LR drop before resuming monitoring
-        mode='min',  # 'min' for loss, 'max' for accuracy/Dice scores
-        min_lr=1e-6  # Lower limit for learning rate
-    )
-    callbacks.append(reduce_lr)
 
     compile_model = True
     init_epoch = 0

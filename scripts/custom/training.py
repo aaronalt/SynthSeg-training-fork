@@ -1,6 +1,7 @@
 """
 SynthSeg training script for claustrum segmentation
 #######
+compare with: boundary.labels.CE
 """
 
 import os
@@ -28,7 +29,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'boundary.labels.CE'
+version = 'orig.labels.CE'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -91,9 +92,7 @@ path_generation_labels = np.array([0, 14, 15, 16, 24,
                                    2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 17, 18, 26, 28, 138,
                                    41, 42, 43, 44, 46, 47, 49, 50, 51, 52, 53, 54, 58, 60, 139])
 n_neutral_labels = 5
-path_segmentation_labels = np.array([0, 0, 0, 0, 0,
-                                   2, 3, 0, 0, 0, 0, 0, 0, 12, 0, 0, 18, 0, 0, 138,
-                                   41, 42, 0, 0, 0, 0, 0, 0, 51, 0, 0, 54, 0, 0, 139])
+path_segmentation_labels = path_generation_labels.copy()
 
 # Label weights for Dice loss (Claustrum=1, others=0)
 output_labels = np.unique(path_segmentation_labels)

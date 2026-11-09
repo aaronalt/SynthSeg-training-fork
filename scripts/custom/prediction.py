@@ -31,36 +31,6 @@ DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evalu
 FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
 RERUN_TMP_PREDICTIONS = False
 
-# Which real-image TEST set to predict. The final checkpoint is selected WITHOUT real data, by the synthetic
-# validation loss (collect_metrics.py --select val_loss), so both real sets are untouched test sets:
-#   'test3t' -> TEST_2 (6 subjects, 3T): main comparison against Mauri's model. Predict all checkpoints
-#               (CHECKPOINTS = None) so collect_metrics.py can build the 3T sensitivity table.
-#   'test7t' -> real 7T scans of the 4 VAL_2 subjects: secondary 7T result. Predict only the selected
-#               checkpoint, e.g. CHECKPOINTS = ['dice_finetune_045_200'].
-SPLIT = 'test3t'
-SPLIT_IMAGES = {'test3t': '/home/althause/data/TEST_2',
-                'test7t': '/home/althause/data/VAL_2_real'}
-SEG_ROOTS = {'test3t': '/home/althause/data/seg', 'test7t': '/home/althause/data/seg_7t'}
-# manual labels each split is evaluated against (searched recursively, matched by subject + hemisphere
-# + contrast/session when the filenames carry one)
-SPLIT_GT = {'test3t': '/home/althause/data/claustrum_gt/3T', 'test7t': '/home/althause/data/claustrum_gt/7T/all'}
-CHECKPOINTS = None # ['dice_finetune_028_200']  # None = all checkpoints, else a list of checkpoint names (without .h5)
-
-
-def _subject_ids(folder):
-    return {m.group(1) for f in os.listdir(folder) for m in [re.search(r'sub-0*(\d+)', f)] if m}
-
-
-if SPLIT not in SPLIT_IMAGES:
-    sys.exit(f"SPLIT must be one of {list(SPLIT_IMAGES)}, got '{SPLIT}'")
-if not os.path.isdir(SPLIT_IMAGES[SPLIT]):
-    sys.exit(f"SPLIT='{SPLIT}': image folder {SPLIT_IMAGES[SPLIT]} does not exist (set SPLIT_IMAGES).")
-if all(os.path.isdir(d) for d in SPLIT_IMAGES.values()):
-    shared = _subject_ids(SPLIT_IMAGES['test3t']) & _subject_ids(SPLIT_IMAGES['test7t'])
-    if shared:
-        print(f'Note: subjects {sorted(shared, key=int)} are in both the 3T and 7T test sets '
-              f'(intentional: same anatomy at both field strengths).')
-
 # Store results across all models for summary
 all_model_results = []
 model_dice_scores = {}  # Track mean dice per model for cleanup
@@ -80,15 +50,15 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261109_000653_boundary.labels.CE'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20260923_093722_only_quality_labels_clau10x'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
 # model_files = model_files[37:39]
 
 # Ground truth directories for evaluation
 gt_dirs = {
     '7T': [
-        Path('/home/althause/data/claustrum_gt/7T/all')
-        #Path('/home/althause/data/claustrum_gt/7T/T2'),
+        Path('/home/althause/data/claustrum_gt/7T/T1_CONTROL'),
+        Path('/home/althause/data/claustrum_gt/7T/T2'),
     ],
     '3T': [
         Path('/home/althause/data/claustrum_gt/3T/T1_CONTROL_edit_08.26'),
@@ -111,19 +81,13 @@ def get_epoch(f):
 #############
 
 model_files = sorted(model_files, key=get_epoch)
-if CHECKPOINTS:
-    model_files = [f for f in model_files if os.path.basename(f).replace('.h5', '') in CHECKPOINTS]
-    if not model_files:
-        sys.exit(f'None of CHECKPOINTS {CHECKPOINTS} found in {model_dir}')
-print(f"SPLIT='{SPLIT}': predicting {len(model_files)} checkpoint(s) on {SPLIT_IMAGES[SPLIT]}, "
-      f"evaluating against {SPLIT_GT[SPLIT]}")
 
 for path_model in model_files:
     # Paths
     exp = model_dir.split('/')[-1]
     model_name = os.path.basename(path_model).replace('.h5', '')
     model = os.path.basename(path_model)
-    path_images = SPLIT_IMAGES[SPLIT]
+    path_images = '/home/althause/data/TEST_2'
 
     # Determine field strength (manual override or auto-detect)
     if FORCE_FIELD_STRENGTH:
@@ -148,7 +112,7 @@ for path_model in model_files:
     else:
         active_gt_dirs = gt_dirs.get(field_strength, gt_dirs['3T'])
         #print(f"Using GT directories: {[str(d) for d in active_gt_dirs]}")
-    path_segm = f'{SEG_ROOTS[SPLIT]}/{exp}/{model_name}'
+    path_segm = f'/home/althause/data/seg/{exp}/{model_name}'
     path_posteriors = os.path.join(path_segm, 'posteriors')
     path_resampled = os.path.join(path_segm, 'resampled')
     path_vol = os.path.join(path_segm, 'volumes.csv')
@@ -185,9 +149,8 @@ for path_model in model_files:
     feat_multiplier = trained_model_params.get('feat_multiplier')
     n_channels = trained_model_params.get('n_channels')
 
-    # uncomment the mauri line (test3t only) to evaluate against Mauri's model segmentations instead
-    # path_gt = SPLIT_GT[SPLIT]
-    path_gt = gt_dirs['3T']
+    # comment out to run predictions on mauri segmentations
+    path_gt = '/home/althause/data/claustrum_gt/3T'
     # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
 
     # Delete stale evaluation arrays so old results cannot be re-merged below. Only clear the folder
@@ -288,9 +251,8 @@ for path_model in model_files:
     else:
         path_dice = os.path.join(path_segm, 'dice.npy')
 
-    # per-epoch test curves (descriptive only: the checkpoint is selected by validation loss, not these)
     if os.path.isfile(path_dice):
-        epoch_dir = os.path.join(model_dir, f'curves_{SPLIT}', f'epoch_{get_epoch(path_model):03d}')
+        epoch_dir = os.path.join(model_dir, 'validation', f'epoch_{get_epoch(path_model):03d}')
         os.makedirs(epoch_dir, exist_ok=True)
         # Mask exact-0 scores as NaN: each single-hemisphere file scores exactly 0 for its absent
         # label, which would otherwise halve the curve. Caveat: a genuine dice of 0 (total failure)
@@ -326,7 +288,7 @@ list_tb_names = []
 for compare_exp in compare_experiments:
     compare_model_dir = compare_exp if os.path.isabs(compare_exp) else os.path.join(models_root, compare_exp)
     compare_name = os.path.basename(compare_model_dir.rstrip('/'))
-    compare_val_dir = os.path.join(compare_model_dir, f'curves_{SPLIT}')
+    compare_val_dir = os.path.join(compare_model_dir, 'validation')
     if os.path.isdir(compare_val_dir):
         list_validation_dirs.append(compare_val_dir)
         architecture_names.append(compare_name)

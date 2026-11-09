@@ -50,8 +50,8 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None,
 
     # Moment/CE need true probabilities, not logits
     needs_prob = any(m in ('moment', 'ce', 'crossentropy') for m in metrics)
-    pred_prob = KL.Activation('softmax', name='prediction_softmax')(last_tensor) if needs_prob else last_tensor
-
+    # pred_prob = KL.Activation('softmax', name='prediction_softmax')(last_tensor) if needs_prob else last_tensor
+    pred_prob = last_tensor
     weighted_losses = []
 
     for metric, weight in zip(metrics, loss_weights):
@@ -68,7 +68,7 @@ def metrics_model(input_model, label_list, metrics='dice', class_weights=None,
         elif metric in ('ce', 'crossentropy'):
             loss = layers.CrossEntropyLoss(
                 class_weights=class_weights,
-                boundary_weights=5,
+                boundary_weights=0,
                 boundary_dist=1,
                 skip_background=True
             )([labels_gt, pred_prob])  # probabilities

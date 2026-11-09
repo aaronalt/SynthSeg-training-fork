@@ -1702,6 +1702,24 @@ class CrossEntropyLoss(Layer):
         # compare prediction/target, ce has the same shape has the input tensors
         ce = -gt * tf.math.log(pred)
 
+        # voxel-wise weight map: boundary weighting x class weighting
+        w = tf.ones_like(gt)
+        if self.boundary_weights:
+            avg = self.avg_pooling_layer(pool_size=2 * self.boundary_dist + 1, strides=1, padding='same')(gt)
+            boundaries = tf.cast(avg > 0., 'float32') * tf.cast(avg < (1 / len(self.spatial_axes) - 1e-4), 'float32')
+            if self.skip_background:
+                boundaries_channels = tf.unstack(boundaries, axis=-1)
+                boundaries = tf.stack([tf.zeros_like(boundaries_channels[0])] + boundaries_channels[1:], axis=-1)
+            w = w * (1 + self.boundary_weights * boundaries)
+        if self.dynamic_weighting:
+            w = w / (tf.reduce_sum(gt * w, self.spatial_axes, keepdims=True) + tf.keras.backend.epsilon())
+        elif self.class_weights_tens is not None:
+            w = w * self.class_weights_tens          # shape (1, 1, 1, 1, n_labels)
+
+        # weighted mean over voxels (each voxel weighted by its true class and boundary weight)
+        return tf.reduce_sum(w * ce) / (tf.reduce_sum(w * gt) + tf.keras.backend.epsilon())
+
+        '''
         # apply boundary weighting (ie voxels close to region boundaries will be counted several times to compute Dice)
         if self.boundary_weights:
             avg = self.avg_pooling_layer(pool_size=2 * self.boundary_dist + 1, strides=1, padding='same')(gt)
@@ -1729,9 +1747,11 @@ class CrossEntropyLoss(Layer):
         ce = tf.math.reduce_mean(tf.math.reduce_sum(ce, axis=-1))
 
         return ce
+        '''
 
     def compute_output_shape(self, input_shape):
         return [[]]
+
 
 
 class MomentLoss(Layer):

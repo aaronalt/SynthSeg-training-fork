@@ -28,7 +28,7 @@ from claustrum_uncertainty import predict_with_tta
 
 # === OPTIONS ===
 DELETE_TMP_PREDICTIONS = True  # Set to True to delete segmentations after evaluation (keeps CSVs)
-FORCE_FIELD_STRENGTH = 'both'  # Set to '3T', '7T', 'both', or None for auto-detect
+FORCE_FIELD_STRENGTH = '3T'  # Set to '3T', '7T', 'both', or None for auto-detect
 RERUN_TMP_PREDICTIONS = False
 
 # Store results across all models for summary

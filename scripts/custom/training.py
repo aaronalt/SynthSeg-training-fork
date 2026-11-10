@@ -29,7 +29,7 @@ tf.config.experimental.enable_tensor_float_32_execution(True)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'CE.weights.sweep.0.5'
+version = 'CE.weights.sweep.0.1'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -196,5 +196,5 @@ training(TRAIN,
          label_weights=label_weights,
          hd95_weight=hd95_weight,
          metric_type=['dice', 'ce'],      # 'dice', ['dice','moment'], ['dice','ce']
-         loss_weights=[1.0, 0.5]          # e.g. CE:[1.0, 0.1]
+         loss_weights=[1.0, 0.1]          # e.g. CE:[1.0, 0.1]
          )

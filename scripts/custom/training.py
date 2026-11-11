@@ -33,7 +33,7 @@ tf.keras.utils.set_random_seed(seed)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'res.params.random.86x1.1x.86mm'
+version = 'res.params.random'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"
@@ -131,11 +131,11 @@ bias_field_std = 0.3
 noise_std = 30
 
 # Acquisition resolution parameters
-randomise_res = False
+randomise_res = True
 max_res_iso = 1.2
 max_res_aniso = 1.2
-data_res = [0.8594, 1.1, 0.8594]
-thickness = [0.8594, 1.1, 0.8594]
+data_res = None # [0.8594, 1.1, 0.8594]
+thickness = None # [0.8594, 1.1, 0.8594]
 
 # Load intensity priors
 path_mri = '/home/althause/data/intensity_estimation/images'

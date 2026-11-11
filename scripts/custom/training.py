@@ -33,7 +33,7 @@ tf.keras.utils.set_random_seed(seed)
 # Subjects to exclude from training (poor labels)
 EXCLUDE_SUBJECTS = []  # Add any bad subjects here
 VERBOSE = False
-version = 'res.params.random.batchNorm'
+version = 'res.params.random'
 
 # Experiment setup
 experiment_name = f"experiment_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{version}"

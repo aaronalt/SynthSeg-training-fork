@@ -365,11 +365,7 @@ def training(labels_dir,
         print("\n=== Training phase: all layers trainable (including BatchNorm) ===")
 
         for layer in unet_model.layers:
-            layer.trainable = True
-
-        # sanity check: confirm BatchNorm layers exist and are now trainable
-        bn_layers = [l for l in unet_model.layers if isinstance(l, tf.keras.layers.BatchNormalization)]
-        print(f"BatchNorm layers: {len(bn_layers)}, trainable: {sum(l.trainable for l in bn_layers)}")
+            layer.trainable = not isinstance(layer, tf.keras.layers.BatchNormalization)
 
         # Create fresh dice model with unfrozen weights
         dice_model = models.Model(unet_model.inputs, unet_model.outputs)
@@ -426,6 +422,8 @@ def train_model(model,
         KC.ModelCheckpoint(os.path.join(model_dir, '%s_%s_best.h5' % (metric_label, phase)),
                            monitor='val_loss', mode='min', save_best_only=True,
                            save_weights_only=True, verbose=1),
+        KC.ModelCheckpoint(os.path.join(model_dir, '%s_%s_epoch{epoch:03d}.h5' % (metric_label, phase)),
+                           save_best_only=False, save_weights_only=True),
         KC.CSVLogger(os.path.join(log_dir, 'training.log')),
         KC.EarlyStopping(monitor='val_loss', mode='min', patience=12,
                          verbose=1, restore_best_weights=True),

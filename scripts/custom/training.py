@@ -131,7 +131,7 @@ bias_field_std = 0.3
 noise_std = 30
 
 # Acquisition resolution parameters
-randomise_res = True
+randomise_res = False
 max_res_iso = 1.2
 max_res_aniso = 1.2
 data_res = [0.8594, 1.1, 0.8594]

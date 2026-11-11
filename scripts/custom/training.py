@@ -25,6 +25,7 @@ from ext.lab2im import utils as lab2im_utils
 tf.config.experimental.enable_tensor_float_32_execution(True)
 
 # set random seed
+seed = 103
 tf.keras.utils.set_random_seed(seed)
 
 # === CONFIGURATION ===

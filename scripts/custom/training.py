@@ -24,6 +24,9 @@ from ext.lab2im import utils as lab2im_utils
 # Enable TF32 for Ampere Tensor Cores (A30)
 tf.config.experimental.enable_tensor_float_32_execution(True)
 
+# set random seed
+tf.keras.utils.set_random_seed(seed)
+
 # === CONFIGURATION ===
 
 # Subjects to exclude from training (poor labels)

@@ -157,6 +157,7 @@ def training(labels_dir,
              boundary_loss_erosions=10,
              metric_type='dice',  # 'dice', ['dice','moment'], ['dice','ce'], etc.
              loss_weights=None,
+             seed=103
              ):
 
     # check epochs
@@ -211,6 +212,7 @@ def training(labels_dir,
         'boundary_loss_alpha': boundary_loss_alpha,
         'boundary_loss_type': boundary_loss_type,
         'boundary_loss_erosions': boundary_loss_erosions,
+        'seed': seed
     })
 
     # get label lists
@@ -344,9 +346,10 @@ def training(labels_dir,
         wl2_model = models.Model(unet_model.inputs, unet_model.outputs)
         wl2_model = metrics.metrics_model(wl2_model, segmentation_labels, 'wl2')
 
-        train_model(wl2_model, input_generator, lr, wl2_epochs, steps_per_epoch, model_dir,
+        train_model(wl2_model, input_generator, lr, steps_per_epoch, model_dir,
                     'wl2',
                     checkpoint,
+                    wl2_epochs=0,
                     reinitialise_momentum=True,
                     validation_data=val_generator,
                     phase='wl2',
@@ -359,14 +362,14 @@ def training(labels_dir,
     # Phase 2: Finetune (unfreeze all layers except BatchNorm)
     # -------------------------------------------------------------------------
     if dice_epochs > 0:
-        print("\n=== Finetune Phase: Unfreezing all layers (except BatchNorm) ===")
+        print("\n=== Training phase: all layers trainable (including BatchNorm) ===")
 
-        # Unfreeze all layers except BatchNorm
         for layer in unet_model.layers:
-            if isinstance(layer, tf.keras.layers.BatchNormalization):
-                layer.trainable = False
-            else:
-                layer.trainable = True
+            layer.trainable = True
+
+        # sanity check: confirm BatchNorm layers exist and are now trainable
+        bn_layers = [l for l in unet_model.layers if isinstance(l, tf.keras.layers.BatchNormalization)]
+        print(f"BatchNorm layers: {len(bn_layers)}, trainable: {sum(l.trainable for l in bn_layers)}")
 
         # Create fresh dice model with unfrozen weights
         dice_model = models.Model(unet_model.inputs, unet_model.outputs)
@@ -421,14 +424,14 @@ def train_model(model,
 
     callbacks = [
         KC.ModelCheckpoint(os.path.join(model_dir, '%s_%s_best.h5' % (metric_label, phase)),
-                           monitor='val_dice_loss', mode='min', save_best_only=True,
+                           monitor='val_loss', mode='min', save_best_only=True,
                            save_weights_only=True, verbose=1),
         KC.CSVLogger(os.path.join(log_dir, 'training.log')),
-        KC.EarlyStopping(monitor='val_dice_loss', mode='min', patience=12,
+        KC.EarlyStopping(monitor='val_loss', mode='min', patience=12,
                          verbose=1, restore_best_weights=True),
         KC.TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True,
                        write_images=False, update_freq='epoch'),
-        ReduceLROnPlateau(monitor='val_dice_loss', mode='min', factor=0.5, patience=5,
+        ReduceLROnPlateau(monitor='val_loss', mode='min', factor=0.5, patience=5,
                           verbose=1, min_delta=0.005, cooldown=2, min_lr=1e-6)
     ]
 
@@ -468,7 +471,7 @@ def train_model(model,
     # compile
     if compile_model or metric_type == 'dice' or not hasattr(model, 'optimizer'):
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate, global_clipnorm=1.0),
             loss=metrics.IdentityLoss().loss)
 
     # fit

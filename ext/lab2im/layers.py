@@ -1694,13 +1694,11 @@ class CrossEntropyLoss(Layer):
         # make sure tensors are probabilistic
         gt = inputs[0]
         pred = inputs[1]
-        if self.enable_checks:  # disabling is useful to, e.g., use incomplete label maps
+        if self.enable_checks:
             gt = K.clip(gt / (tf.math.reduce_sum(gt, axis=-1, keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
             pred = pred / (tf.math.reduce_sum(pred, axis=-1, keepdims=True) + tf.keras.backend.epsilon())
-            pred = K.clip(pred, tf.keras.backend.epsilon(), 1 - tf.keras.backend.epsilon())  # to avoid log(0)
 
-        # compare prediction/target, ce has the same shape has the input tensors
-        ce = -gt * tf.math.log(pred)
+        ce = -gt * tf.math.log(pred + tf.keras.backend.epsilon()) # moved epsilon inside the log to fix gradient clipping bug
 
         # voxel-wise weight map: boundary weighting x class weighting
         w = tf.ones_like(gt)

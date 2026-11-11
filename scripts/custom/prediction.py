@@ -275,8 +275,8 @@ for path_model in model_files:
 # Experiments to compare on the validation/learning curves. Entries are experiment directory names
 # resolved against the models root (the parent of model_dir), or absolute paths. The current
 # experiment is always plotted first, so validation_curves.png is saved into its validation/ dir.
-compare_experiments = ['experiment_20261111_111015_res.params.0.86x1.1x0.86.batchNorm', 'experiment_20261111_105439_res.params.0.86x1.1x0.86.batchNorm']
-
+# compare_experiments = ['experiment_20261111_111015_res.params.0.86x1.1x0.86.batchNorm', 'experiment_20261111_105439_res.params.0.86x1.1x0.86.batchNorm']
+'''
 # plot_validation_curves expects one folder per network, with per-epoch subfolders containing dice.npy.
 # dice.npy rows are [138, 139] (no background row), so average both rows explicitly via eval_indices.
 models_root = os.path.dirname(model_dir)
@@ -317,5 +317,5 @@ if list_tb_files:
     print(f"\nLearning curve saved to: {os.path.join(model_dir, 'learning_curve.png')}")
 else:
     print(f"\nNo tensorboard event files found under {models_root}; skipping learning curve.")
-
+'''
 

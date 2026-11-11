@@ -72,8 +72,8 @@ gt_dirs = {
 
 # Extract epoch number for sorting (assumes format like 'dice_finetune_005_20.h5')
 def get_epoch(f):
-    match = re.search(r'_(\d+)_\d+\.h5$', f)
-    return int(match.group(1)) if match else 0
+    match = re.search(r'epoch(\d+)\.h5$', f)
+    return int(match.group(1)) if match else -1  # 'best' and unmatched files get -1
 
 #############
 # Prediction
@@ -151,6 +151,7 @@ for path_model in model_files:
     # comment out to run predictions on mauri segmentations
     path_gt = gt_dirs['3T']
     # path_gt = '/home/althause/data/claustrum_gt/mauri_3t'
+    use_mauri = any('mauri' in str(p) for p in (path_gt if isinstance(path_gt, list) else [path_gt]))
 
     # Delete stale evaluation arrays so old results cannot be re-merged below. Only clear the folder
     # this run writes to (mauri/ for mauri GT, top level otherwise), so the other GT's results survive.

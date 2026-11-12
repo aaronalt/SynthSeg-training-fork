@@ -50,7 +50,7 @@ np.save('./data/labels_classes_priors/segmentation_labels.npy', segmentation_lab
 np.save('./data/labels_classes_priors/topology_classes.npy', topology_classes)
 
 # Find all model checkpoints and sort by epoch number
-model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261111_105439_res.params.0.86x1.1x0.86.batchNorm'
+model_dir = '/home/althause/SynthSeg-training-fork/models/test/experiment_20261111_173402_res.params.random.86x1.1x.86mm'
 model_files = sorted(glob(os.path.join(model_dir, '*.h5')))
 # model_files = model_files[5:]
 
